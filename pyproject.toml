@@ -7,7 +7,23 @@ authors = [
     { name = "uhryniuk", email = "duhry99@gmail.com" }
 ]
 requires-python = ">=3.14"
-dependencies = []
+dependencies = [
+    "tenacity",
+    "PyYAML",
+    "pytz",
+    "playwright",
+    "structlog",
+    "beautifulsoup4",
+    "python-pyper",
+    "selenium",
+    "requests",
+]
+
+[dependency-groups]
+dev = [
+    "pyrefly>=0.38.2",
+    "ruff>=0.14.2",
+]
 
 [project.scripts]
 yoink = "yoink:main"
@@ -15,3 +31,32 @@ yoink = "yoink:main"
 [build-system]
 requires = ["uv_build>=0.9.9,<0.10.0"]
 build-backend = "uv_build"
+
+[tool.mypy]
+check_untyped_defs = true
+follow_imports = "silent"
+warn_redundant_casts = "true"
+warn_unused_ignores = "true"
+exclude=[]
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.format]
+docstring-code-format = true
+
+[tool.ruff.lint]
+extend-select = [
+   #   "D",   # pydocstyle
+  "I",   # isort
+]
+
+ignore = [
+    "F403",  # 'from module import *' used; unable to detect undefined names
+    "F405",  # Name may be undefined, or defined from star imports: module
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "pep257"
+
+
