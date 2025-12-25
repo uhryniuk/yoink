@@ -50,7 +50,7 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
-def _main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
@@ -85,7 +85,3 @@ def _main(argv: list[str] | None = None) -> int:
         del _driver
 
     return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(_main())
