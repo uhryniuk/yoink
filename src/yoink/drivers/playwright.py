@@ -1,22 +1,17 @@
-from io import BytesIO
 import json
 import os
-from PIL import Image
-from typing import Callable, Optional, Any, Mapping, Dict, List
-from yoink.common import extract_code_from_funct
-from playwright.sync_api import Page, Locator
-from yoink.drivers.base import (
-    BaseDriver,
-    JS_GET_INTERACTIVES,
-    JS_WAIT_DOM_IDLE,
-    PossibleInteractionsByXpath,
-    InteractionType,
-)
-from yoink.exceptions import (
-    NoElementException,
-    AmbiguousException,
-)
 import time
+from io import BytesIO
+from typing import Any, Callable, Dict, List, Mapping, Optional
+
+from PIL import Image
+from playwright.sync_api import Locator, Page
+
+from yoink.common import extract_code_from_funct
+from yoink.drivers.base import (JS_GET_INTERACTIVES, JS_WAIT_DOM_IDLE,
+                                BaseDriver, InteractionType,
+                                PossibleInteractionsByXpath)
+from yoink.exceptions import AmbiguousException, NoElementException
 
 
 class PlaywrightDriver(BaseDriver):
@@ -30,8 +25,8 @@ class PlaywrightDriver(BaseDriver):
         width: int = 1080,
         height: int = 1080,
         user_data_dir: Optional[str] = None,
-        log_waiting_time: bool=False,
-        waiting_completion_timeout: int=10,
+        log_waiting_time: bool = False,
+        waiting_completion_timeout: int = 10,
     ) -> None:
         os.environ["PW_TEST_SCREENSHOT_NO_FONTS_READY"] = (
             "1"  # Allow playwright to take a screenshots even if the fonts won't load in head mode.
@@ -299,7 +294,9 @@ class PlaywrightDriver(BaseDriver):
     def scroll_down(self) -> None:
         self.execute_script("window.scrollBy(0, window.innerHeight);")
 
-    def get_possible_interactions(self, in_viewport: bool=True, foreground_only: bool=True) -> PossibleInteractionsByXpath:
+    def get_possible_interactions(
+        self, in_viewport: bool = True, foreground_only: bool = True
+    ) -> PossibleInteractionsByXpath:
         exe: Dict[str, List[str]] = self.execute_script(
             JS_GET_INTERACTIVES,
             in_viewport,

@@ -1,11 +1,8 @@
-import inspect
-import re
 import importlib
-import pkgutil
 import inspect
-from typing import Type, List, TypeVar
+import pkgutil
 import re
-from typing import Callable, List, TypeVar
+from typing import Callable, List, Type, TypeVar
 
 from bs4 import BeautifulSoup
 
@@ -146,3 +143,20 @@ def is_valid_html(html: str) -> bool:
         return True
     except Exception:
         return False
+
+
+def load_urls_from_txt(path: Path) -> list[str]:
+    with path.open("r", encoding="utf-8") as fh:
+        return [line.strip() for line in fh if line.strip()]
+
+
+def load_urls_from_json(path: Path) -> list[str]:
+    with path.open("r", encoding="utf-8") as fh:
+        data = json.load(fh)
+
+    # support either a list at top-level or an object with a `urls` key
+    if isinstance(data, list):
+        return [str(x) for x in data]
+    if isinstance(data, dict) and "urls" in data and isinstance(data["urls"], list):
+        return [str(x) for x in data["urls"]]
+    raise ValueError(f"Unsupported json format in {path}")

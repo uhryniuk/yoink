@@ -1,49 +1,33 @@
+import json
+import os
+import time
 from abc import ABC
-from typing import Any, Optional, Callable, Mapping, Dict, List
-from selenium.webdriver.remote.webdriver import WebDriver
+from io import BytesIO
+from typing import Any, Callable, Dict, List, Mapping, Optional
+
+import yaml
+from selenium.common.exceptions import (ElementClickInterceptedException,
+                                        NoSuchElementException,
+                                        StaleElementReferenceException,
+                                        TimeoutException, WebDriverException)
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.action_chains import ActionChains
+from selenium.webdriver.common.actions.wheel_input import ScrollOrigin
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
-from selenium.common.exceptions import (
-    NoSuchElementException,
-    WebDriverException,
-    ElementClickInterceptedException,
-    StaleElementReferenceException,
-    TimeoutException,
-)
-from selenium.webdriver.support.ui import Select, WebDriverWait
+from selenium.webdriver.remote.remote_connection import RemoteConnection
+from selenium.webdriver.remote.webdriver import WebDriver
 from selenium.webdriver.remote.webelement import WebElement
-from selenium.webdriver.common.actions.wheel_input import ScrollOrigin
-from yoink.drivers.base import (
-    BaseDriver,
-    JS_GET_INTERACTIVES,
-    JS_WAIT_DOM_IDLE,
-    JS_GET_SCROLLABLE_PARENT,
-    PossibleInteractionsByXpath,
-    ScrollDirection,
-    InteractionType,
-    DOMNode,
-)
-from yoink.exceptions import (
-    CannotBackException,
-    NoElementException,
-    AmbiguousException,
-)
-from io import BytesIO
-from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.support.ui import Select, WebDriverWait
 
 # from lavague.core.utilities.format_utils import (
-from yoink.common import (
-    extract_code_from_funct,
-    quote_numeric_yaml_values,
-)
-from selenium.webdriver.common.action_chains import ActionChains
-import time
-import yaml
-import json
-from selenium.webdriver.remote.remote_connection import RemoteConnection
-import requests
-import os
-
+from yoink.common import extract_code_from_funct
+from yoink.drivers.base import (JS_GET_INTERACTIVES, JS_GET_SCROLLABLE_PARENT,
+                                JS_WAIT_DOM_IDLE, BaseDriver, DOMNode,
+                                InteractionType, PossibleInteractionsByXpath,
+                                ScrollDirection)
+from yoink.exceptions import (AmbiguousException, CannotBackException,
+                              NoElementException)
 
 ATTACH_MOVE_LISTENER = """
 if (!window._lavague_move_listener) {
@@ -71,42 +55,6 @@ if (window._lavague_move_listener) {
 arguments[0].filter(a => a).forEach(a => a.style.cssText = a.dataset.originalStyle || '');
 document.querySelectorAll('.lavague-highlight').forEach(a => a.remove());
 """
-
-
-def get_highlighter_style(color: str = "red", label: bool = False) -> str:
-    set_style = f"""
-    const r = a.getBoundingClientRect();
-    const bb = document.createElement('div');
-    const s = window.getComputedStyle(a);
-    bb.className = 'lavague-highlight';
-    bb.style.position = 'fixed';
-    bb.style.top = r.top + 'px';
-    bb.style.left = r.left + 'px';
-    bb.style.width = r.width + 'px';
-    bb.style.height = r.height + 'px';
-    bb.style.border = '3px solid {color}';
-    bb.style.borderRadius = s.borderRadius;
-    bb.style['z-index'] = '2147483647';
-    bb.style['pointer-events'] = 'none';
-    bb._tracking = a;
-    document.body.appendChild(bb);
-    """
-
-    if label:
-        set_style += """
-        const label = document.createElement('div');
-        label.style.position = 'absolute';
-        label.style.backgroundColor = 'red';
-        label.style.color = 'white';
-        label.style.padding = '0 4px';
-        label.style.top = '-12px';
-        label.style.left = '-12px';
-        label.style['font-size'] = '13px';
-        label.style['border-bottom-right-radius'] = '13px';
-        label.textContent = i;
-        bb.appendChild(label);
-        """
-    return set_style
 
 
 class XPathResolved(ABC):
@@ -137,8 +85,8 @@ class SeleniumDriver(BaseDriver):
         height: Optional[int] = 1080,
         options: Optional[Options] = None,
         driver: Optional[WebDriver] = None,
-        log_waiting_time: bool=False,
-        waiting_completion_timeout: int=10,
+        log_waiting_time: bool = False,
+        waiting_completion_timeout: int = 10,
         remote_connection: Optional["BrowserbaseRemoteConnection"] = None,
     ) -> None:
         self.headless = headless
@@ -157,11 +105,12 @@ class SeleniumDriver(BaseDriver):
     #   These imports are necessary as they will be pasted to the output
     def default_init_code(self) -> Any:
         from selenium import webdriver
-        from selenium.webdriver.common.by import By
         from selenium.webdriver.chrome.options import Options
-        from selenium.webdriver.common.keys import Keys
         from selenium.webdriver.common.action_chains import ActionChains
-        from ll_data.drivers.base import JS_SETUP_GET_EVENTS
+        from selenium.webdriver.common.by import By
+        from selenium.webdriver.common.keys import Keys
+
+        from yoink.drivers.base import JS_SETUP_GET_EVENTS
 
         if self.options:
             chrome_options = self.options
@@ -285,56 +234,6 @@ driver.set_window_size({width}, {height} + height_difference)
             return res
         except:
             return False
-
-    def get_highlighted_element(self, generated_code: str):
-        elements = []
-
-        # Ensures that numeric values are quoted
-        generated_code = quote_numeric_yaml_values(generated_code)
-
-        data = yaml.safe_load(generated_code)
-        if not isinstance(data, List):
-            data = [data]
-        for item in data:
-            for action in item["actions"]:
-                try:
-                    xpath = action["action"]["args"]["xpath"]
-                    elem = self.driver.find_element(By.XPATH, xpath)
-                    elements.append(elem)
-                except:
-                    pass
-
-        outputs = []
-        for element in elements:
-            element: WebElement
-
-            bounding_box = {}
-            viewport_size = {}
-
-            self.execute_script(
-                "arguments[0].setAttribute('style', arguments[1]);",
-                element,
-                "border: 2px solid red;",
-            )
-            self.execute_script("arguments[0].scrollIntoView({block: 'center'});", element)
-            screenshot = self.get_screenshot_as_png()
-
-            bounding_box["x1"] = element.location["x"]
-            bounding_box["y1"] = element.location["y"]
-            bounding_box["x2"] = bounding_box["x1"] + element.size["width"]
-            bounding_box["y2"] = bounding_box["y1"] + element.size["height"]
-
-            viewport_size["width"] = self.execute_script("return window.innerWidth;")
-            viewport_size["height"] = self.execute_script("return window.innerHeight;")
-            screenshot = BytesIO(screenshot)
-            screenshot = Image.open(screenshot)
-            output = {
-                "screenshot": screenshot,
-                "bounding_box": bounding_box,
-                "viewport_size": viewport_size,
-            }
-            outputs.append(output)
-        return outputs
 
     def switch_frame(self, xpath: str) -> None:
         iframe = self.driver.find_element(By.XPATH, xpath)
@@ -642,261 +541,3 @@ driver.set_window_size({width}, {height} + height_difference)
 
         # Switch to the tab with the given id
         driver.switch_to.window(window_handles[tab_id])
-
-    def get_nodes(self, xpaths: List[str]) -> List["SeleniumNode"]:
-        return [SeleniumNode(xpath, self) for xpath in xpaths]
-
-    def exec_script_for_nodes(self, nodes: List["SeleniumNode"], script: str) -> None:
-        standard_nodes: List[SeleniumNode] = []
-        special_nodes: List[SeleniumNode] = []
-
-        for node in nodes:
-            # iframe and shadow DOM must use the resolve_xpath method
-            target = special_nodes if "iframe" in node.xpath or "//" in node.xpath else standard_nodes
-            target.append(node)
-
-        if len(standard_nodes) > 0:
-            self.driver.execute_script(
-                "arguments[0]=arguments[0].map(a => document.evaluate(a, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue).filter(a => a);"
-                + script,
-                [n.xpath for n in standard_nodes],
-            )
-
-        if len(special_nodes) > 0:
-            # iframe and shadow DOM must use the resolve_xpath method
-            for n in special_nodes:
-                if n.element:
-                    self.driver.execute_script(
-                        script,
-                        [n.element],
-                    )
-                    self.switch_default_frame()
-
-    def remove_nodes_highlight(self, xpaths: List[str]) -> None:
-        self.exec_script_for_nodes(
-            self.get_nodes(xpaths),
-            REMOVE_HIGHLIGHT,
-        )
-
-    def highlight_nodes(self, xpaths: List[str], color: str = "red", label=False) -> Callable:
-        nodes = self.get_nodes(xpaths)
-        self.driver.execute_script(ATTACH_MOVE_LISTENER)
-        set_style = get_highlighter_style(color, label)
-        self.exec_script_for_nodes(nodes, "arguments[0].forEach((a, i) => { " + set_style + "})")
-        return self._add_highlighted_destructors(lambda: self.remove_nodes_highlight(xpaths))
-
-    def get_possible_interactions(self, in_viewport: bool=True, foreground_only: bool=True) -> PossibleInteractionsByXpath:
-        exe: Dict[str, List[str]] = self.driver.execute_script(
-            JS_GET_INTERACTIVES,
-            in_viewport,
-            foreground_only,
-        )
-        res = dict()
-        for k, v in exe.items():
-            res[k] = set(InteractionType[i] for i in v)
-        return res
-
-
-class SeleniumNode(DOMNode):
-    def __init__(self, xpath: str, driver: SeleniumDriver) -> None:
-        self.xpath = xpath
-        self._driver = driver
-        super().__init__()
-
-    @property
-    def element(self) -> WebElement:
-        if hasattr(self, "_element"):
-            return self._element
-        try:
-            self._element = self._driver.resolve_xpath(self.xpath).element
-        except StaleElementReferenceException:
-            self._element = None
-        return self._element
-
-    def highlight(self, color: str = "red", bounding_box: bool=True):
-        self._driver.highlight_nodes([self.xpath], color, bounding_box)
-        return self
-
-    def clear(self):
-        self._driver.remove_nodes_highlight([self.xpath])
-        return self
-
-    def take_screenshot(self):
-        if self.element:
-            try:
-                return Image.open(BytesIO(self.element.screenshot_as_png))
-            except WebDriverException:
-                pass
-        return Image.new("RGB", (0, 0))
-
-    def get_html(self):
-        return self._driver.driver.execute_script("return arguments[0].outerHTML", self.element)
-
-
-class BrowserbaseRemoteConnection(RemoteConnection):
-    _session_id = None
-
-    def __init__(
-        self,
-        remote_server_addr: str,
-        api_key: Optional[str] = None,
-        project_id: Optional[str] = None,
-    ) -> None:
-        super().__init__(remote_server_addr)
-        self.api_key = api_key or os.environ["BROWSERBASE_API_KEY"]
-        self.project_id = project_id or os.environ["BROWSERBASE_PROJECT_ID"]
-
-    def get_remote_connection_headers(self, parsed_url, keep_alive: bool=False) -> dict[str, str]:
-        if self._session_id is None:
-            self._session_id = self._create_session()
-        headers = super().get_remote_connection_headers(parsed_url, keep_alive)
-        headers.update({"x-bb-api-key": self.api_key})
-        headers.update({"session-id": self._session_id})
-        return headers
-
-    def _create_session(self):
-        url = "https://www.browserbase.com/v1/sessions"
-        headers = {"Content-Type": "application/json", "x-bb-api-key": self.api_key}
-        response = requests.post(url, json={"projectId": self.project_id}, headers=headers)
-        return response.json()["id"]
-
-
-SELENIUM_PROMPT_TEMPLATE = """
-You are a chrome extension and your goal is to interact with web pages. You have been given a series of HTML snippets and queries.
-Your goal is to return a list of actions that should be done in order to execute the actions.
-Always target elements by using the full XPATH. You can only use one of the Xpaths included in the HTML. Do not derive new Xpaths.
-
-Your response must always be in the YAML format with the yaml markdown indicator and must include the main item "actions" , which will contains the objects "action", which contains the string "name" of tool of choice, and necessary arguments ("args") if required by the tool. 
-There must be only ONE args sub-object, such as args (if the tool has multiple arguments). 
-You must always include the comments as well, describing your actions step by step, following strictly the format in the examples provided.
-
-Provide high level explanations about why you think this element is the right one.
-Your answer must be short and concise. Always includes comments in the YAML before listing the actions.
-
-The actions available are:
-
-Name: click
-Description: Click on an element with a specific xpath
-Arguments:
-  - xpath (string)
-
-Name: setValue
-Description: Focus on and set the value of an input element with a specific xpath
-Arguments:
-  - xpath (string)
-  - value (string)
-  
-Name: dropdownSelect
-Description: Select an option from a dropdown menu by its value
-Arguments:
-    - xpath (string)
-    - value (string)
-
-Name: setValueAndEnter
-Description: Like "setValue", except then it presses ENTER. Use this tool can submit the form when there's no "submit" button.
-Arguments:
-  - xpath (string)
-  - value (string)
-
-Name: hover
-Description: Move the mouse cursor over an element identified by the given xpath. It can be used to reveal tooltips or dropdown that appear on hover. It can also be used before scrolling to ensure the focus is in the correct container before performing the scroll action.
-Arguments:
-  - xpath (string)
-
-Name: scroll
-Description: Scroll the container that holds the element identified by the given xpath
-Arguments:
-  - xpath (string)
-  - value (string): UP or DOWN
-
-Here are examples of previous answers:
-HTML:
-<div>Check in / Check out</div>
-<div xpath="/html/body/div[5]/div/div/div/div/div[3]/div/main/div[2]/div/div[2]/div/div/div/div/div/div/div/div[2]/div/div/div/div/div/div/div/div/div[2]/div/div/div/div"><a aria-hidden="true" href="/rooms/48556008?adults=2&amp;search_mode=regular_search&amp;check_in=2024-08-15&amp;check_out=2024-08-22" rel="noopener noreferrer nofollow" tabindex="-1" target="listing_48556008"><div class="dir dir-ltr" xpath="/html/body/div[5]/div/div/div/div/div[3]/div/main/div[2]/div/div[2]/div/div/div/div/div/div/div/div[2]/div/div/div/div/div/div/div/div/div[2]/div/div/div/div/a/div">
-<div xpath="/html/body/div[5]/div/div/div/div/div[3]/div/main/div[2]/div/div[2]/div/div/div/div/div/div/div/div[2]/div/div"><div xpath="/html/body/div[5]/div/div/div/div/div[3]/div/main/div[2]/div/div[2]/div/div/div/div/div/div/div/div[2]/div/div/div"><div aria-labelledby="title_48556008" data-testid="card-container" role="group" xpath="/html/body/div[5]/div/div/div/div/div[3]/div/main/div[2]/div/div[2]/div/div/div/div/div/div/div/div[2]/div/div/div/div"><a aria-labelledby="title_48556008" href="/rooms/48556008?adults=2&amp;search_mode=regular_search&amp;check_in=2024-08-15&amp;check_out=2024-08-22" rel="noopener noreferrer nofollow" target="listing_48556008"></a><div xpath="/html/body/div[5]/div/div/div/div/div[3]/div/main/div[2]/div/div[2]/div/div/div/div/div/div/div/div[2]/div/div/div/div/div">
-Query: Click on 'Home in Ploubazlanec'
-Authorized Xpaths: "{'/html/body/div[5]/div/div/div/div/div[3]/header/div/div/div/div/div/div[2]/div/div/span[2]', '/html/body/div[5]/div/div/div/div/div[3]/header/div/div/div/div/div/div[2]/div/div', '/html/body/div[5]/d iv/div/div/div/div[3]/div/main/div[2]/div/div[2]/div/div/div/div/div/div/div/div[2]/div/div', '/html/body/div[5]/div/div/div/div/div[3]/header/div/div/div/div/div/div[2]/div/div/span[2]/button/div', '/html/body/div[5]/div/div/div/div/div[3]/div/main/div[2]/div/div[2]/div/div/div/div/div/div/div/div[2]/div/div/div', '/html/body/div[5]/div/div/div/div/div[3]/div/main/div[2]/div/div[2]/div/div/div/div/div/div/div/div[2]/div/div/div/div/div/div/div/div/div[2]/div/div/div/div/a/div', '/html/body/div[5]/div/div/div/div/div[3]/div/main/div[2]/div/div[2]/div/div/div/div/div/div/div/div[2]/div/div/div/div', '/html/body/div[5]/div/div/div/div/div[3]/header/div/div/div/div/div/div[2]/div/div/span[2]/button[2]', '/html/body/div[5]/div/div/div/div/div[3]/div/main/div[2]/div/div[2]/div/div/div/div/div/div/div/div[2]/div/div/div/div/div/div/div/div/div[2]/div/div/div/div', '/html/body/div[5]/div/div/div/div/div[3]/div/main/div[2]/div/div[2]/div/div/div/div/div/div/div/div[2]/div/div/div/div/div', '/html/body/div[5]/div/div/div/div/div[3]/header/div/div/div/div/div/div[2]/div/div/span[2]/button'}"
-Completion:
-```yaml
-# Let's think through this step-by-step:
-# 1. The query asks us to click on 'Home in Ploubazlanec'
-# 2. In the HTML, we need to find an element that represents this listing
-# 3. We can see a div with the text "Home in Ploubazlanec" in the title
-# 4. The parent element of this div is an anchor tag, which is likely the clickable link for the listing
-# 5. We should use the XPath of this anchor tag to perform the click action
-
-- actions:
-    - action:
-        # Click on the anchor tag that contains the listing title
-        args:
-            xpath: "/html/body/div[5]/div/div/div/div/div[3]/div/main/div[2]/div/div[2]/div/div/div/div/div/div/div/div[2]/div/div/div/div/div/div/div/div/div[2]/div/div/div/div/a"
-        name: "click"
-```
------
-HTML:
-<div class="devsite-top-logo-row-middle" xpath="/html/body/section/devsite-header/div/div[1]/div/div/div[2]">
-<div class="devsite-header-upper-tabs" xpath="/html/body/section/devsite-header/div/div[1]/div/div/div[2]/div[1]">
-<devsite-tabs class="upper-tabs devsite-overflow-menu--open" connected="" xpath="/html/body/section/devsite-header/div/div[1]/div/div/div[2]/div[1]/devsite-tabs">
-<a aria-label="Extended Navigation" class="devsite-icon devsite-icon-arrow-drop-down" href="#" style="border: 2px solid red;" xpath="/html/body/section/devsite-header/div/div[1]/div/div/div[2]/div[1]/devsite-tabs/nav/tab[2]/a"><!--?lit$8296333005$-->More</a>
-<div class="devsite-tabs-overflow-menu" scrollbars="" xpath="/html/body/section/devsite-header/div/div[1]/div/div/div[2]/div[1]/devsite-tabs/nav/tab[2]/div">
-<tab xpath="/html/body/section/devsite-header/div/div[1]/div/div/div[2]/div[1]/devsite-tabs/nav/tab[2]/div/tab[1]">
-<a class="devsite-tabs-content gc-analytics-event" data-category="Site-Wide Custom Events" data-label="Tab: Gemma" href="https://ai.google.dev/gemma" track-metadata-eventdetail="https://ai.google.dev/gemma" track-metadata-module="primary nav" track-metadata-position="nav - gemma" track-name="gemma" track-type="nav" xpath="/html/body/section/devsite-header/div/div[1]/div/div/div[2]/div[1]/devsite-tabs/nav/tab[2]/div/tab[1]/a">
-Authorized Xpaths: "{'/html/body/section/devsite-header/div/div[1]/div/div/div[2]/div[1]/devsite-tabs', '/html/body/section/devsite-header/div/div[1]/div/div/div[2]/div[1]/devsite-tabs/nav/tab[2]/a', '/html/body/section/devsite-header/div/div[1]/div/div/div[2]/div[1]/devsite-tabs/nav/tab[2]/div', '/html/body/section/devsite-header/div/div[1]/div/div/div[2]/div[1]/devsite-tabs/nav/tab[2]/div/tab[1]/a', '/html/body/section/devsite-header/div/div[1]/div/div/div[2]/div[1]', '/html/body/section/devsite-header/div/div[1]/div/div/div[2]/div[1]/devsite-tabs/nav/tab[2]/div/tab[1]', '/html/body/section/devsite-header/div/div[1]/div/div/div[2]'}"
-Query: Click on "Gemma" under the "More" dropdown menu.
-Completion:
-```yaml
-# Let's think step by step
-# First, we notice that the query asks us to click on the "Gemma" option under the "More" dropdown menu.
-# In the provided HTML, we see that the "More" dropdown menu is within a tab element with a specific class and role attribute.
-# The "More" dropdown menu can be identified by its class 'devsite-overflow-tab' and contains a link element with the text 'More'.
-# We need to interact with this dropdown menu to reveal the hidden options.
-# Specifically, for the "More" dropdown menu, there is an anchor element within a tab element:
-# /html/body/section/devsite-header/div/div[1]/div/div/div[2]/div[1]/devsite-tabs/nav/tab[2]/a
-
-- actions:
-    - action:
-        # We can use this XPATH to identify and click on the "More" dropdown menu:
-        args:
-            xpath: "/html/body/section/devsite-header/div/div[1]/div/div/div[2]/div[1]/devsite-tabs/nav/tab[2]/a"
-            value: ""
-        name: "click"
-    - action:
-        # After clicking the "More" dropdown, we need to select the "Gemma" option from the revealed menu.
-        # The "Gemma" option is located within the dropdown menu and can be identified by its anchor element with the corresponding text:
-        # /html/body/section/devsite-header/div/div[1]/div/div/div[2]/div[1]/devsite-tabs/nav/tab[2]/div/tab[1]/a
-        # Thus, we use this XPATH to identify and click on the "Gemma" option:
-        args:
-            xpath: "/html/body/section/devsite-header/div/div[1]/div/div/div[2]/div[1]/devsite-tabs/nav/tab[2]/div/tab[1]/a"
-            value: ""
-        name: "click"
-```
------
-HTML:
-<select name="checkin_eta_hour" xpath="/html/body/div/main/form/section/div/select">
-<option disabled="" selected="" value="">Please select</option>
-<option value="-1">I don't know</option>
-<option value="0">12:00 AM – 1:00 AM </option>
-<option value="1">1:00 AM – 2:00 AM </option>
-<option value="2">2:00 AM – 3:00 AM </option>
-<option value="3">3:00 AM – 4:00 AM </option>
-</select>
-Authorized Xpaths: "{'/html/body/div/main/form/section/div/select'}"
-Query: Select the 2:00 AM - 3:00 AM option from the dropdown menu
-Completion:
-```yaml
-# Let's think step by step
-# The query asks us to select the "2:00 AM - 3:00 AM" option from a dropdown menu.
-# We need to identify the correct option within the dropdown menu based on its value attribute.
-# The dropdown menu is specified by its XPATH, and the value of the option we need to select is "2".
-# We can use the following "select" XPATH to locate the dropdown menu and the value "2" to select the appropriate option:
-# /html/body/div/main/form/section/div/select
-
-- actions:
-    - action:
-        # Select the "3:00 AM - 4:00 AM" option by targeting the dropdown menu with the specified XPATH.
-        args:
-            xpath: "/html/body/div/main/form/section/div/select"
-            value: "2"
-        name: "dropdownSelect"
-```
-"""

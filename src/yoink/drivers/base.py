@@ -1,16 +1,16 @@
-from PIL import Image
-import os
-from pathlib import Path
-import re
-from typing import Any, Callable, Optional, Mapping, Dict, Set, List, Tuple, Union
-from abc import ABC, abstractmethod
-from yoink.common import (
-    extract_code_from_funct,
-    extract_imports_from_lines,
-)
-from enum import Enum
-from datetime import datetime
 import hashlib
+import os
+import re
+from abc import ABC, abstractmethod
+from datetime import datetime
+from enum import Enum
+from pathlib import Path
+from typing import (Any, Callable, Dict, List, Mapping, Optional, Set, Tuple,
+                    Union)
+
+from PIL import Image
+
+from yoink.common import extract_code_from_funct, extract_imports_from_lines
 
 
 class InteractionType(Enum):
@@ -162,7 +162,7 @@ class BaseDriver(ABC):
     def is_bottom_of_page(self) -> bool:
         return self.execute_script("return (window.innerHeight + window.scrollY + 1) >= document.body.scrollHeight;")
 
-    def get_screenshots_whole_page(self, max_screenshots: int=30) -> list[str]:
+    def get_screenshots_whole_page(self, max_screenshots: int = 30) -> list[str]:
         """Take screenshots of the whole page"""
         screenshot_paths = []
 
@@ -180,11 +180,6 @@ class BaseDriver(ABC):
 
         self.previously_scanned = True
         return screenshot_paths
-
-    @abstractmethod
-    def get_possible_interactions(self, in_viewport: bool=True, foreground_only: bool=True) -> PossibleInteractionsByXpath:
-        """Get elements that can be interacted with as a dictionary mapped by xpath"""
-        pass
 
     def check_visibility(self, xpath: str) -> bool:
         pass
@@ -295,7 +290,7 @@ class BaseDriver(ABC):
     def get_nodes_from_html(self, html: str) -> List["DOMNode"]:
         return self.get_nodes(re.findall(r_get_xpaths_from_html, html))
 
-    def highlight_node_from_xpath(self, xpath: str, color: str = "red", label: bool=False) -> Callable:
+    def highlight_node_from_xpath(self, xpath: str, color: str = "red", label: bool = False) -> Callable:
         return self.highlight_nodes([xpath], color, label)
 
     def highlight_nodes(self, xpaths: List[str], color: str = "red", label=False) -> Callable:
@@ -304,7 +299,7 @@ class BaseDriver(ABC):
             n.highlight(color)
         return self._add_highlighted_destructors(lambda: [n.clear() for n in nodes])
 
-    def highlight_nodes_from_html(self, html: str, color: str = "blue", label: bool=False) -> Callable:
+    def highlight_nodes_from_html(self, html: str, color: str = "blue", label: bool = False) -> Callable:
         return self.highlight_nodes(re.findall(r_get_xpaths_from_html, html), color, label)
 
     def remove_highlight(self) -> None:
