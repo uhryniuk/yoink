@@ -3,7 +3,7 @@ class NavigationException(Exception):
 
 
 class CannotBackException(NavigationException):
-    def __init__(self, message: str="History root reached, cannot go back") -> None:
+    def __init__(self, message: str = "History root reached, cannot go back") -> None:
         super().__init__(message)
 
 
@@ -12,12 +12,12 @@ class RetrievalException(NavigationException):
 
 
 class NoElementException(RetrievalException):
-    def __init__(self, message: str="No element found") -> None:
+    def __init__(self, message: str = "No element found") -> None:
         super().__init__(message)
 
 
 class AmbiguousException(RetrievalException):
-    def __init__(self, message: str="Multiple elements could match") -> None:
+    def __init__(self, message: str = "Multiple elements could match") -> None:
         super().__init__(message)
 
 
@@ -39,6 +39,7 @@ class NoMorePagesError(Exception):
     """
 
     pass
+
 
 class DeadPageError(Exception):
     """
@@ -65,12 +66,10 @@ class ExtractionError(Exception):
 
 
 class CliError(Exception):
-    def __init__(self, message, exit_code: int=1) -> None:
+    def __init__(self, message, exit_code: int = 1) -> None:
         super().__init__(message)
         self.exit_code = exit_code
         self.message = message
 
     def __str__(self):
         return self.message
-
-
