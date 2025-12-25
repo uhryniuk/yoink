@@ -20,7 +20,7 @@ from selenium.webdriver.remote.webdriver import WebDriver
 from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.support.ui import Select, WebDriverWait
 
-# from lavague.core.utilities.format_utils import (
+# from yoink.core.utilities.format_utils import (
 from yoink.common import extract_code_from_funct
 from yoink.drivers.base import (JS_GET_INTERACTIVES, JS_GET_SCROLLABLE_PARENT,
                                 JS_WAIT_DOM_IDLE, BaseDriver, DOMNode,
@@ -30,9 +30,9 @@ from yoink.exceptions import (AmbiguousException, CannotBackException,
                               NoElementException)
 
 ATTACH_MOVE_LISTENER = """
-if (!window._lavague_move_listener) {
-    window._lavague_move_listener = function() {
-        const bbs = document.querySelectorAll('.lavague-highlight');
+if (!window._yoink_move_listener) {
+    window._yoink_move_listener = function() {
+        const bbs = document.querySelectorAll('.yoink-highlight');
         bbs.forEach(bb => {
             const rect = bb._tracking.getBoundingClientRect();
             bb.style.top = rect.top + 'px';
@@ -41,19 +41,19 @@ if (!window._lavague_move_listener) {
             bb.style.height = rect.height + 'px';
         });
     };
-    window.addEventListener('scroll', window._lavague_move_listener);
-    window.addEventListener('resize', window._lavague_move_listener);
+    window.addEventListener('scroll', window._yoink_move_listener);
+    window.addEventListener('resize', window._yoink_move_listener);
 }
 """
 
 REMOVE_HIGHLIGHT = """
-if (window._lavague_move_listener) {
-    window.removeEventListener('scroll', window._lavague_move_listener);
-    window.removeEventListener('resize', window._lavague_move_listener);
-    delete window._lavague_move_listener;
+if (window._yoink_move_listener) {
+    window.removeEventListener('scroll', window._yoink_move_listener);
+    window.removeEventListener('resize', window._yoink_move_listener);
+    delete window._yoink_move_listener;
 }
 arguments[0].filter(a => a).forEach(a => a.style.cssText = a.dataset.originalStyle || '');
-document.querySelectorAll('.lavague-highlight').forEach(a => a.remove());
+document.querySelectorAll('.yoink-highlight').forEach(a => a.remove());
 """
 
 
