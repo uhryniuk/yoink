@@ -1,14 +1,11 @@
 import hashlib
 import os
-import re
 from abc import ABC, abstractmethod
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
 from typing import (Any, Callable, Dict, List, Mapping, Optional, Set, Tuple,
-                    Union)
-
-from PIL import Image
+                    )
 
 from yoink.common import extract_code_from_funct, extract_imports_from_lines
 
@@ -283,88 +280,6 @@ class BaseDriver(ABC):
     @abstractmethod
     def get_screenshot_as_png(self) -> bytes:
         pass
-
-    def get_nodes(self, xpaths: List[str]) -> List["DOMNode"]:
-        raise NotImplementedError("get_nodes not implemented")
-
-    def get_nodes_from_html(self, html: str) -> List["DOMNode"]:
-        return self.get_nodes(re.findall(r_get_xpaths_from_html, html))
-
-    def highlight_node_from_xpath(self, xpath: str, color: str = "red", label: bool = False) -> Callable:
-        return self.highlight_nodes([xpath], color, label)
-
-    def highlight_nodes(self, xpaths: List[str], color: str = "red", label=False) -> Callable:
-        nodes = self.get_nodes(xpaths)
-        for n in nodes:
-            n.highlight(color)
-        return self._add_highlighted_destructors(lambda: [n.clear() for n in nodes])
-
-    def highlight_nodes_from_html(self, html: str, color: str = "blue", label: bool = False) -> Callable:
-        return self.highlight_nodes(re.findall(r_get_xpaths_from_html, html), color, label)
-
-    def remove_highlight(self) -> None:
-        if hasattr(self, "_highlight_destructors"):
-            for destructor in self._highlight_destructors:
-                destructor()
-            delattr(self, "_highlight_destructors")
-
-    def _add_highlighted_destructors(self, destructors: Union[List[Callable], Callable]) -> Callable:
-        if not hasattr(self, "_highlight_destructors"):
-            self._highlight_destructors = []
-        if isinstance(destructors, Callable):
-            self._highlight_destructors.append(destructors)
-            return destructors
-
-        self._highlight_destructors.extend(destructors)
-        return lambda: [d() for d in destructors]
-
-    def highlight_interactive_nodes(
-        self,
-        *with_interactions: tuple[InteractionType],
-        color: str = "red",
-        in_viewport=True,
-        foreground_only=True,
-        label=False,
-    ):
-        if with_interactions is None or len(with_interactions) == 0:
-            return self.highlight_nodes(
-                list(self.get_possible_interactions(in_viewport=in_viewport, foreground_only=foreground_only).keys()),
-                color,
-                label,
-            )
-
-        return self.highlight_nodes(
-            [
-                xpath
-                for xpath, interactions in self.get_possible_interactions(
-                    in_viewport=in_viewport, foreground_only=foreground_only
-                ).items()
-                if set(interactions) & set(with_interactions)
-            ],
-            color,
-            label,
-        )
-
-
-class DOMNode(ABC):
-    @abstractmethod
-    def highlight(self, color: str = "red", bounding_box=True) -> None:
-        pass
-
-    @abstractmethod
-    def clear(self):
-        return self
-
-    @abstractmethod
-    def take_screenshot(self) -> Image:
-        pass
-
-    @abstractmethod
-    def get_html(self) -> str:
-        pass
-
-    def __str__(self) -> str:
-        return self.get_html()
 
 
 class ScrollDirection(Enum):
