@@ -8,7 +8,7 @@ from yoink.config import Config, load_config
 from yoink.engine import Engine
 from yoink.models import Action, ExtractReq, ExtractResult, ProxyConfig, RetryPolicy
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 __all__ = [
     "Engine",
