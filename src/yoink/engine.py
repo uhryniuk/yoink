@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import multiprocessing as mp
+import sys
 from collections.abc import Iterable, Iterator
 
 from yoink.config import Config, load_config
@@ -54,8 +55,11 @@ class Engine:
         if self._started:
             return
 
-        # spawn avoids forking a process that already holds Playwright state
-        ctx = mp.get_context("spawn")
+        # On Linux, fork is safe: Playwright is initialised inside worker_main
+        # (post-fork), so the parent never holds any Playwright or asyncio state
+        # at fork time. spawn is kept for macOS/Windows where fork isn't the
+        # default, but there it requires `if __name__ == '__main__':` in scripts.
+        ctx = mp.get_context("fork" if sys.platform.startswith("linux") else "spawn")
 
         self._manager = ctx.Manager()
         shared_times = self._manager.dict()
