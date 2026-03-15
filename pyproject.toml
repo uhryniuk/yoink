@@ -9,15 +9,9 @@ authors = [
 requires-python = ">=3.12"
 dependencies = [
     "tenacity",
-    "PyYAML",
-    "pytz",
     "playwright",
     "structlog",
     "beautifulsoup4",
-    "python-pyper",
-    "selenium",
-    "requests",
-    "pillow>=12.0.0",
 ]
 
 [project.optional-dependencies]
@@ -34,6 +28,8 @@ dev = [
     "pytest>=8.3",
     "pytest-asyncio>=0.24",
     "pytest-cov>=6.0",
+    "fastapi>=0.135.1",
+    "uvicorn[standard]>=0.41.0",
 ]
 
 [tool.pytest.ini_options]

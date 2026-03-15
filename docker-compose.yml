@@ -1,0 +1,25 @@
+services:
+  yoink:
+    build: .
+    ports:
+      - "${YK_PORT:-8000}:8000"
+    environment:
+      # All config can be overridden via YK_ env vars.
+      # See docs/ARCHITECTURE.md for the full list.
+      YK_SERVICE__HOST: "0.0.0.0"
+      YK_SERVICE__PORT: "8000"
+      YK_SERVICE__API_KEY: "${YK_SERVICE__API_KEY:-}"
+      YK_WORKERS__COUNT: "${YK_WORKERS__COUNT:-}"
+      YK_WORKERS__PAGES_PER_WORKER: "${YK_WORKERS__PAGES_PER_WORKER:-5}"
+      YK_LOG__LEVEL: "${YK_LOG__LEVEL:-INFO}"
+      YK_LOG__MINIMAL: "${YK_LOG__MINIMAL:-false}"
+    # /dev/shm size matters for Chromium — default 64MB is often too small
+    shm_size: "512mb"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "uv", "run", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
