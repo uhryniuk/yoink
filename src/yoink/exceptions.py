@@ -1,75 +1,58 @@
 class NavigationException(Exception):
-    pass
+    """Raised when a browser navigation operation fails."""
 
 
 class CannotBackException(NavigationException):
+    """Raised when the browser history is at root and cannot go back."""
+
     def __init__(self, message: str = "History root reached, cannot go back") -> None:
         super().__init__(message)
 
 
-class RetrievalException(NavigationException):
-    pass
+class ScraperError(Exception):
+    """Base class for general scraping errors."""
+
+
+class RetrievalException(ScraperError):
+    """Raised when an element cannot be retrieved from the page."""
 
 
 class NoElementException(RetrievalException):
+    """Raised when no element matches the given selector."""
+
     def __init__(self, message: str = "No element found") -> None:
         super().__init__(message)
 
 
 class AmbiguousException(RetrievalException):
+    """Raised when multiple elements match a selector that expected one."""
+
     def __init__(self, message: str = "Multiple elements could match") -> None:
         super().__init__(message)
 
 
 class ElementOutOfContextException(RetrievalException):
-    def __init__(self, xpath: str, message: str = None) -> None:
+    """Raised when an element exists on the page but is outside the target context."""
+
+    def __init__(self, xpath: str, message: str | None = None) -> None:
         super().__init__(message or f"Element exists but was not in context: {xpath}")
 
 
-class ScraperError(Exception):
-    pass
-
-
 class NoMorePagesError(Exception):
-    """
-    Raised when there are no more pages to scrape.
-
-    This is expected behavior and should not be treated as an error,
-    but rather a signal to stop the scraping process.
-    """
-
-    pass
+    """Signal that pagination is exhausted. Not a true error — stop iteration on this."""
 
 
-class DeadPageError(Exception):
-    """
-    Raised when a page is considered dead, meaning the page no longer exists.
-    """
-
-    pass
+class DeadPageError(ScraperError):
+    """Raised when a page no longer exists or is unrecoverable."""
 
 
-class ForcerRetryError(Exception):
-    """
-    Raise this error to force a retry in the scraper when a try block is inside a retry loop.
-    """
-
-    pass
+class ForceRetryError(ScraperError):
+    """Raise to force a retry when inside a tenacity retry block."""
 
 
 class DataError(Exception):
-    pass
+    """Raised when extracted data is malformed or unexpected."""
 
 
-class ExtractionError(Exception):
-    pass
-
-
-class CliError(Exception):
-    def __init__(self, message, exit_code: int = 1) -> None:
-        super().__init__(message)
-        self.exit_code = exit_code
-        self.message = message
-
-    def __str__(self):
-        return self.message
+class ExtractionError(ScraperError):
+    """Raised when content extraction from a page fails."""
