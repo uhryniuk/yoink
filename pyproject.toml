@@ -1,7 +1,7 @@
 [project]
 name = "yoink"
 version = "0.1.0"
-description = "Add your description here"
+description = "Fast, fault-tolerant headless browser scraping at scale."
 readme = "README.md"
 authors = [
     { name = "uhryniuk", email = "duhry99@gmail.com" }
@@ -30,6 +30,7 @@ dev = [
     "pytest-cov>=6.0",
     "fastapi>=0.135.1",
     "uvicorn[standard]>=0.41.0",
+    "bump-my-version>=1.2.7",
 ]
 
 [tool.pytest.ini_options]
@@ -71,5 +72,25 @@ ignore = [
 
 [tool.ruff.lint.pydocstyle]
 convention = "pep257"
+
+[tool.bumpversion]
+current_version = "0.1.0"
+parse = "(?P<major>\\d+)\\.(?P<minor>\\d+)\\.(?P<patch>\\d+)"
+serialize = ["{major}.{minor}.{patch}"]
+commit = true
+tag = true
+tag_name = "v{new_version}"
+commit_args = ""
+message = "chore: bump version {current_version} → {new_version}"
+
+[[tool.bumpversion.files]]
+filename = "pyproject.toml"
+search = 'version = "{current_version}"'
+replace = 'version = "{new_version}"'
+
+[[tool.bumpversion.files]]
+filename = "src/yoink/__init__.py"
+search = '__version__ = "{current_version}"'
+replace = '__version__ = "{new_version}"'
 
 
