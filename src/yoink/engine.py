@@ -55,11 +55,12 @@ class Engine:
         if self._started:
             return
 
-        # On Linux, fork is safe: Playwright is initialised inside worker_main
-        # (post-fork), so the parent never holds any Playwright or asyncio state
-        # at fork time. spawn is kept for macOS/Windows where fork isn't the
-        # default, but there it requires `if __name__ == '__main__':` in scripts.
-        ctx = mp.get_context("fork" if sys.platform.startswith("linux") else "spawn")
+        # forkserver on Linux: a dedicated single-threaded server process does all
+        # forking, so workers are never forked from a multithreaded parent. This
+        # avoids the Python 3.14 DeprecationWarning and potential lock deadlocks.
+        # Unlike spawn, forkserver doesn't re-import __main__, so callers don't
+        # need `if __name__ == '__main__':`. Falls back to spawn on macOS/Windows.
+        ctx = mp.get_context("forkserver" if sys.platform.startswith("linux") else "spawn")
 
         self._manager = ctx.Manager()
         shared_times = self._manager.dict()
