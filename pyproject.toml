@@ -1,6 +1,6 @@
 [project]
 name = "yoink"
-version = "0.1.1"
+version = "0.1.2"
 description = "Fast, fault-tolerant headless browser scraping at scale."
 readme = "README.md"
 authors = [
@@ -74,7 +74,7 @@ ignore = [
 convention = "pep257"
 
 [tool.bumpversion]
-current_version = "0.1.1"
+current_version = "0.1.2"
 parse = "(?P<major>\\d+)\\.(?P<minor>\\d+)\\.(?P<patch>\\d+)"
 serialize = ["{major}.{minor}.{patch}"]
 commit = true
