@@ -28,7 +28,7 @@ jobs:
           enable-cache: true
 
       - name: Install dev dependencies
-        run: uv sync
+        run: uv sync --frozen
 
       - name: Configure git
         run: |
