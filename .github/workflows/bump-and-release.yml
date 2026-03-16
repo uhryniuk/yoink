@@ -14,12 +14,12 @@ jobs:
     name: Bump version, tag, and release
     runs-on: ubuntu-latest
     permissions:
-      contents: write  # push commit + tag, create GitHub release
+      contents: write
 
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # full history so bump-my-version can tag correctly
+          fetch-depth: 0
           token: ${{ secrets.RELEASE_TOKEN }}
 
       - name: Install uv
@@ -39,9 +39,9 @@ jobs:
         run: uv run bump-my-version bump ${{ inputs.bump }}
 
       - name: Push commit and tag
-        run: |
-          git remote set-url origin https://x-access-token:${{ secrets.RELEASE_TOKEN }}@github.com/${{ github.repository }}
-          git push origin main --follow-tags
+        run: git push origin main --follow-tags
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
 
       - name: Read new version
         id: version
@@ -54,4 +54,10 @@ jobs:
             --generate-notes \
             --verify-tag
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+
+  publish:
+    name: Publish to PyPI
+    needs: bump-and-release
+    uses: ./.github/workflows/release.yml
+    secrets: inherit

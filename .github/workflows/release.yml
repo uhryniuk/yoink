@@ -4,11 +4,13 @@ on:
   push:
     tags:
       - "v*.*.*"
+  workflow_call:
 
 jobs:
   build-and-publish:
     name: Build & publish to PyPI
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
 
