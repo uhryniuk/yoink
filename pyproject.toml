@@ -1,5 +1,5 @@
 [project]
-name = "yoink-url"
+name = "python-yoink"
 version = "0.1.5"
 description = "Fast, fault-tolerant headless browser scraping at scale."
 readme = "README.md"
