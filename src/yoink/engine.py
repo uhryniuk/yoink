@@ -7,8 +7,9 @@ import sys
 from collections.abc import Iterable, Iterator
 
 from yoink.config import Config, load_config
-from yoink.models import ExtractReq, ExtractResult
+from yoink.models import Request, Result
 from yoink.rate_limiter import RateLimiter
+from yoink.states import State
 from yoink.worker import SENTINEL, worker_main
 
 
@@ -17,20 +18,30 @@ class Engine:
 
     Use as a context manager::
 
-        with Engine() as engine:
+        with Engine(config) as engine:
             engine.submit("https://a.com")
             engine.submit("https://b.com")
             for result in engine.results():
                 print(result.html)
 
-    Or submit and stream in one call::
+    Worker-level middleware applies to every request::
 
-        for result in Engine().stream(urls):
-            print(result.url, result.ok)
+        engine = Engine(
+            config,
+            guard=HTTPStatus(200) & Not(SubstringMatch("captcha")),
+            middleware_state=DOMContentLoaded(),
+        )
     """
 
-    def __init__(self, config: Config | None = None) -> None:
+    def __init__(
+        self,
+        config: Config | None = None,
+        guard: State | None = None,
+        middleware_state: State | None = None,
+    ) -> None:
         self._config = config or load_config()
+        self._guard = guard
+        self._middleware_state = middleware_state
         self._input_q: mp.Queue | None = None
         self._output_q: mp.Queue | None = None
         self._workers: list[mp.Process] = []
@@ -55,11 +66,6 @@ class Engine:
         if self._started:
             return
 
-        # forkserver on Linux: a dedicated single-threaded server process does all
-        # forking, so workers are never forked from a multithreaded parent. This
-        # avoids the Python 3.14 DeprecationWarning and potential lock deadlocks.
-        # Unlike spawn, forkserver doesn't re-import __main__, so callers don't
-        # need `if __name__ == '__main__':`. Falls back to spawn on macOS/Windows.
         ctx = mp.get_context("forkserver" if sys.platform.startswith("linux") else "spawn")
 
         self._manager = ctx.Manager()
@@ -72,7 +78,14 @@ class Engine:
         for _ in range(self._config.workers.count):
             p = ctx.Process(
                 target=worker_main,
-                args=(self._input_q, self._output_q, self._config.workers, rate_limiter),
+                args=(
+                    self._input_q,
+                    self._output_q,
+                    self._config.workers,
+                    rate_limiter,
+                    self._guard,
+                    self._middleware_state,
+                ),
                 daemon=True,
             )
             p.start()
@@ -80,22 +93,22 @@ class Engine:
 
         self._started = True
 
-    def submit(self, req: str | ExtractReq) -> None:
-        """Add a URL or ExtractReq to the work queue."""
+    def submit(self, req: str | Request) -> None:
+        """Add a URL or Request to the work queue."""
         if not self._started:
             self.start()
         if isinstance(req, str):
-            req = ExtractReq(url=req)
+            req = Request(url=req)
         self._input_q.put(req)
         self._submitted += 1
 
-    def results(self) -> Iterator[ExtractResult]:
+    def results(self) -> Iterator[Result]:
         """Yield results as they arrive. Blocks until all submitted work is collected."""
         while self._collected < self._submitted:
             yield self._output_q.get()
             self._collected += 1
 
-    def stream(self, reqs: Iterable[str | ExtractReq]) -> Iterator[ExtractResult]:
+    def stream(self, reqs: Iterable[str | Request]) -> Iterator[Result]:
         """Submit all requests then yield results as they complete."""
         if not self._started:
             self.start()
@@ -104,11 +117,7 @@ class Engine:
         yield from self.results()
 
     def shutdown(self, wait: bool = True) -> None:
-        """Gracefully stop all workers and release resources.
-
-        Sends a sentinel to each worker so they finish in-flight work before
-        exiting. Set ``wait=False`` to skip joining (e.g. in tests or signals).
-        """
+        """Gracefully stop all workers and release resources."""
         if not self._started:
             return
 

@@ -5,7 +5,7 @@ import pytest
 import yoink
 from yoink.engine import Engine
 from yoink.models import Request
-from yoink.states import Selector
+from yoink.states import DOMContentLoaded, HTTPStatus, Not, Selector, SubstringMatch
 
 
 def test_engine_single_url(local_server, test_config):
@@ -85,6 +85,41 @@ def test_result_has_http_metadata(local_server, test_config):
     assert result.ok
     assert result.status == 200
     assert "content-type" in result.headers
+
+
+def test_guard_passes(local_server, test_config):
+    """Guard that matches should let the request through."""
+    engine = Engine(test_config, guard=HTTPStatus(200))
+    with engine:
+        engine.submit(local_server + "/")
+        result = next(engine.results())
+
+    assert result.ok
+    assert result.terminal == "success"
+
+
+def test_guard_fails(local_server, test_config):
+    """Guard that doesn't match should fail fast with guard_failed."""
+    engine = Engine(test_config, guard=Not(SubstringMatch("Yoink Test Page")))
+    with engine:
+        engine.submit(local_server + "/")
+        result = next(engine.results())
+
+    assert not result.ok
+    assert result.terminal == "guard_failed"
+
+
+def test_middleware_state(local_server, test_config):
+    """Middleware state should be AND'd into every request's state."""
+    engine = Engine(test_config, middleware_state=DOMContentLoaded())
+    with engine:
+        req = Request(url=local_server + "/")
+        req.state = Selector("#heading")
+        engine.submit(req)
+        result = next(engine.results())
+
+    assert result.ok
+    assert "Yoink Test Page" in result.html
 
 
 def test_public_api_get(local_server, test_config):
