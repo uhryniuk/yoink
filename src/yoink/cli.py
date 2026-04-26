@@ -14,7 +14,7 @@ from urllib.parse import urlparse
 import yoink
 from yoink.common import is_valid_url, load_urls_from_json, load_urls_from_txt
 from yoink.config import load_config
-from yoink.models import ExtractReq, ExtractResult
+from yoink.models import Request, Result
 
 
 # -- input parsing ------------------------------------------------------------
@@ -28,8 +28,11 @@ def _load_input(source: str) -> list[str]:
     path = Path(source)
     if path.exists() and path.is_file():
         if path.suffix == ".json":
-            return load_urls_from_json(path)
-        return load_urls_from_txt(path)
+            urls = load_urls_from_json(path)
+        else:
+            urls = load_urls_from_txt(path)
+        # Validate file-sourced URLs the same way we validate stdin
+        return [u for u in urls if is_valid_url(u)]
 
     if is_valid_url(source):
         return [source]
@@ -48,27 +51,33 @@ def _result_filename(url: str) -> str:
     return f"{domain}_{digest}.html"
 
 
-def _result_to_jsonl(result: ExtractResult) -> str:
+def _result_to_jsonl(result: Result) -> str:
     return json.dumps({
         "url": result.url,
         "ok": result.ok,
+        "status": result.status,
+        "terminal": result.terminal,
         "duration_ms": result.duration_ms,
         "error": str(result.error) if result.error else None,
         "html": result.html,
     })
 
 
-def _write_to_dir(results: list[ExtractResult], directory: Path) -> None:
+def _write_to_dir(results: list[Result], directory: Path) -> None:
     directory.mkdir(parents=True, exist_ok=True)
     for r in results:
+        if not r.ok:
+            continue
         out = directory / _result_filename(r.url)
         out.write_text(r.html, encoding="utf-8")
         print(f"  wrote {out}", file=sys.stderr)
 
 
-def _write_tarball(results: list[ExtractResult], tarball: Path) -> None:
+def _write_tarball(results: list[Result], tarball: Path) -> None:
     with tarfile.open(tarball, "w:gz") as tf:
         for r in results:
+            if not r.ok:
+                continue
             name = _result_filename(r.url)
             data = r.html.encode("utf-8")
             info = tarfile.TarInfo(name=name)
@@ -87,12 +96,17 @@ def _cmd_scrape(args: argparse.Namespace) -> int:
         return 0
 
     cfg = load_config(args.config)
-    if args.workers:
+    # CLI defaults: sync mode
+    if args.workers is None:
+        cfg.workers.count = 1
+    else:
         cfg.workers.count = args.workers
-    if args.pages:
+    if args.pages is None:
+        cfg.workers.page_limit = 1
+    else:
         cfg.workers.page_limit = args.pages
 
-    reqs = [ExtractReq(url=u) for u in urls]
+    reqs = [Request(url=u) for u in urls]
 
     # -- streaming JSONL mode -------------------------------------------------
     if args.stream:
@@ -120,7 +134,6 @@ def _cmd_scrape(args: argparse.Namespace) -> int:
     elif args.tarball:
         _write_tarball(results, Path(args.tarball))
     else:
-        # Default: print HTML to stdout, one result separated by a blank line
         for r in ok:
             print(r.html)
             if len(ok) > 1:
@@ -143,9 +156,9 @@ def _scrape_parser() -> argparse.ArgumentParser:
     p.add_argument("--config", metavar="FILE", default=None,
                    help="Path to TOML config file")
     p.add_argument("--workers", "-w", type=int, default=None,
-                   help="Number of worker processes")
+                   help="Number of worker processes (default: 1)")
     p.add_argument("--pages", "-p", type=int, default=None,
-                   help="Concurrent pages per worker")
+                   help="Concurrent pages per worker (default: 1)")
     p.add_argument("--stream", "-s", action="store_true",
                    help="Emit JSONL results to stdout as each completes")
     p.add_argument("--output", "-o", metavar="DIR",

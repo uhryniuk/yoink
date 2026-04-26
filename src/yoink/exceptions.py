@@ -11,7 +11,3 @@ class TimeoutError(YoinkError):
 
 class NavigationError(YoinkError):
     """Raised when browser navigation to a URL fails."""
-
-
-# Backwards-compat alias — will be removed once worker.py is migrated
-ScraperError = YoinkError

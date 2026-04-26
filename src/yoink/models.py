@@ -7,23 +7,6 @@ from typing import Any
 
 
 @dataclass
-class Action:
-    """Deprecated — will be removed when the State system replaces browser actions."""
-
-    type: str
-    selector: str | None = None
-    value: str | None = None
-    duration_ms: int | None = None
-
-
-@dataclass
-class RetryPolicy:
-    max_attempts: int = 3
-    backoff_factor: float = 2.0
-    retry_on_scraper_error: bool = True
-
-
-@dataclass
 class ProxyConfig:
     server: str
     username: str | None = None
@@ -39,12 +22,6 @@ class Request:
     screenshot: bool = False
     clean_html: bool = False
     metadata: dict[str, Any] = field(default_factory=dict)
-
-    # Deprecated — kept so worker.py and drivers/playwright.py don't break
-    # until they're rewritten in FS-3/FS-4. Will be removed then.
-    wait_for: str = "domcontentloaded"
-    retry: RetryPolicy = field(default_factory=RetryPolicy)
-    actions: list[Action] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return dataclasses.asdict(self)
@@ -97,8 +74,3 @@ class Result:
 
     def to_json(self) -> str:
         return json.dumps(self.to_dict())
-
-
-# Backwards-compat aliases — will be removed once all consumers are migrated
-ExtractReq = Request
-ExtractResult = Result

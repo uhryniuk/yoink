@@ -4,19 +4,7 @@ import json
 
 import pytest
 
-from yoink.models import Action, ProxyConfig, Request, Result, RetryPolicy
-
-
-class TestRetryPolicy:
-    def test_defaults(self):
-        r = RetryPolicy()
-        assert r.max_attempts == 3
-        assert r.backoff_factor == 2.0
-        assert r.retry_on_scraper_error is True
-
-    def test_custom(self):
-        r = RetryPolicy(max_attempts=1, backoff_factor=0.5)
-        assert r.max_attempts == 1
+from yoink.models import ProxyConfig, Request, Result
 
 
 class TestProxyConfig:
@@ -29,19 +17,6 @@ class TestProxyConfig:
     def test_with_credentials(self):
         p = ProxyConfig(server="http://proxy:8080", username="u", password="p")
         assert p.username == "u"
-
-
-class TestAction:
-    def test_click(self):
-        a = Action(type="click", selector="//button")
-        assert a.type == "click"
-        assert a.selector == "//button"
-        assert a.value is None
-        assert a.duration_ms is None
-
-    def test_wait(self):
-        a = Action(type="wait", duration_ms=500)
-        assert a.duration_ms == 500
 
 
 class TestRequest:
