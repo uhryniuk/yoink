@@ -34,6 +34,7 @@ def make_page(**kwargs) -> MagicMock:
     page.url = kwargs.get("url", "https://example.com")
     page.content = AsyncMock(return_value=kwargs.get("html", "<html></html>"))
     page.evaluate = AsyncMock(return_value=kwargs.get("evaluate_result", "complete"))
+    page.inner_text = AsyncMock(return_value=kwargs.get("inner_text", ""))
 
     locator = AsyncMock()
     locator.count = AsyncMock(return_value=kwargs.get("locator_count", 0))
@@ -203,14 +204,32 @@ class TestSelector:
 
 class TestSubstringMatch:
     @pytest.mark.asyncio
-    async def test_present(self):
-        page = make_page(html="<div>product list</div>")
+    async def test_present_in_text(self):
+        page = make_page(inner_text="product list loaded")
         assert await SubstringMatch("product").check(page, None) is True
 
     @pytest.mark.asyncio
-    async def test_absent(self):
-        page = make_page(html="<div>empty</div>")
+    async def test_absent_in_text(self):
+        page = make_page(inner_text="empty page")
         assert await SubstringMatch("product").check(page, None) is False
+
+    @pytest.mark.asyncio
+    async def test_html_mode_searches_source(self):
+        page = make_page(html='<div class="product-card">item</div>', inner_text="item")
+        # html=True searches raw source including tag attributes
+        assert await SubstringMatch("product-card", html=True).check(page, None) is True
+
+    @pytest.mark.asyncio
+    async def test_html_mode_false_checks_text(self):
+        page = make_page(html='<div class="product-card">item</div>', inner_text="item")
+        # default (html=False) searches inner_text, not class attributes
+        assert await SubstringMatch("product-card").check(page, None) is False
+
+    @pytest.mark.asyncio
+    async def test_inner_text_error_falls_back_to_html(self):
+        page = make_page(html="<html>hello</html>")
+        page.inner_text = AsyncMock(side_effect=Exception("no body"))
+        assert await SubstringMatch("hello").check(page, None) is True
 
 
 class TestTimeDelay:
@@ -283,6 +302,18 @@ class TestResponseHeader:
         page = make_page()
         resp = make_response(headers={})
         assert await ResponseHeader("X-Custom", "val").check(page, resp) is False
+
+    @pytest.mark.asyncio
+    async def test_callable_match(self):
+        page = make_page()
+        resp = make_response(headers={"x-cache": "HIT from cdn"})
+        assert await ResponseHeader("x-cache", lambda v: v.startswith("HIT")).check(page, resp) is True
+
+    @pytest.mark.asyncio
+    async def test_callable_mismatch(self):
+        page = make_page()
+        resp = make_response(headers={"x-cache": "MISS"})
+        assert await ResponseHeader("x-cache", lambda v: v.startswith("HIT")).check(page, resp) is False
 
 
 class TestURLMatches:

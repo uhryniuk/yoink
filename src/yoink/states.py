@@ -203,14 +203,25 @@ class Selector(State):
 
 
 class SubstringMatch(State):
-    """True when ``text`` appears in the page HTML source."""
+    """True when ``text`` appears in the page.
 
-    def __init__(self, text: str) -> None:
+    By default checks the visible text (``page.inner_text``). Pass
+    ``html=True`` to search the raw HTML source instead.
+    """
+
+    def __init__(self, text: str, *, html: bool = False) -> None:
         self.text = text
+        self.html = html
 
     async def check(self, page: Page, response: Response | None) -> bool:
-        html = await page.content()
-        return self.text in html
+        if self.html:
+            content = await page.content()
+        else:
+            try:
+                content = await page.inner_text("body")
+            except Exception:
+                content = await page.content()
+        return self.text in content
 
 
 class TimeDelay(State):
@@ -258,11 +269,14 @@ class HTTPStatus(State):
 class ResponseHeader(State):
     """True when the response contains a header matching ``key`` and ``value``.
 
-    The header name comparison is case-insensitive. The value is an
-    exact match.
+    The header name comparison is case-insensitive. ``value`` can be an
+    exact string or a callable predicate::
+
+        ResponseHeader("content-type", "text/html")
+        ResponseHeader("x-cache", lambda v: v.startswith("HIT"))
     """
 
-    def __init__(self, key: str, value: str) -> None:
+    def __init__(self, key: str, value) -> None:
         self.key = key.lower()
         self.value = value
 
@@ -270,7 +284,10 @@ class ResponseHeader(State):
         if response is None:
             return False
         headers = await response.all_headers()
-        return headers.get(self.key, "") == self.value
+        actual = headers.get(self.key, "")
+        if callable(self.value):
+            return bool(self.value(actual))
+        return actual == self.value
 
 
 class URLMatches(State):
