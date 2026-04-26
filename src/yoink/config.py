@@ -25,6 +25,7 @@ class WorkerConfig:
     idle_timeout_secs: int = 300
     headless: bool = True
     user_agent: str | None = None
+    persist_context: bool = False  # reuse one BrowserContext per worker (faster, less isolated)
 
 
 @dataclass

@@ -40,47 +40,77 @@ async def _run(
     middleware_state: State | None = None,
 ) -> None:
     loop = asyncio.get_running_loop()
-    semaphore = asyncio.Semaphore(config.page_limit)
     pending: set[asyncio.Task] = set()
 
     async with async_playwright() as p:
         browser = await pw.launch_browser(p, headless=config.headless)
-        browser_open = True
-        idle_deadline = loop.time() + config.idle_timeout_secs
 
-        while True:
-            req = await _dequeue(loop, input_q, timeout=1.0)
-
-            if req is SENTINEL:
-                break
-
-            if req is None:
-                # Queue timeout — check idle browser shutdown
-                if not pending and browser_open and loop.time() > idle_deadline:
-                    await browser.close()
-                    browser_open = False
-                continue
-
-            # Reopen browser if it was closed due to idle
-            if not browser_open:
-                browser = await pw.launch_browser(p, headless=config.headless)
-                browser_open = True
-
-            idle_deadline = loop.time() + config.idle_timeout_secs
-            await semaphore.acquire()
-
-            task = asyncio.create_task(
-                _fetch(browser, req, output_q, rate_limiter, semaphore, config, guard, middleware_state)
+        if config.persist_context:
+            # One shared context per worker — pages are pre-allocated and reused.
+            # Skips ~50ms new_context() overhead per request at the cost of session isolation.
+            shared_ctx = await pw.open_context(
+                browser, Request(url=""), user_agent=config.user_agent
             )
-            pending.add(task)
-            task.add_done_callback(pending.discard)
+            page_pool: asyncio.Queue = asyncio.Queue()
+            for _ in range(config.page_limit):
+                page = await shared_ctx.new_page()
+                await page_pool.put(page)
 
-        # Drain any in-flight tasks before exiting
-        if pending:
-            await asyncio.gather(*pending, return_exceptions=True)
+            while True:
+                req = await _dequeue(loop, input_q, timeout=1.0)
+                if req is SENTINEL:
+                    break
+                if req is None:
+                    continue
 
-        if browser_open:
-            await browser.close()
+                page = await page_pool.get()
+                task = asyncio.create_task(
+                    _fetch_pooled(page, page_pool, req, output_q, rate_limiter, config,
+                                  guard, middleware_state)
+                )
+                pending.add(task)
+                task.add_done_callback(pending.discard)
+
+            if pending:
+                await asyncio.gather(*pending, return_exceptions=True)
+            await shared_ctx.close()
+
+        else:
+            # Default: new BrowserContext per request — full session isolation.
+            semaphore = asyncio.Semaphore(config.page_limit)
+            browser_open = True
+            idle_deadline = loop.time() + config.idle_timeout_secs
+
+            while True:
+                req = await _dequeue(loop, input_q, timeout=1.0)
+
+                if req is SENTINEL:
+                    break
+
+                if req is None:
+                    if not pending and browser_open and loop.time() > idle_deadline:
+                        await browser.close()
+                        browser_open = False
+                    continue
+
+                if not browser_open:
+                    browser = await pw.launch_browser(p, headless=config.headless)
+                    browser_open = True
+
+                idle_deadline = loop.time() + config.idle_timeout_secs
+                await semaphore.acquire()
+
+                task = asyncio.create_task(
+                    _fetch(browser, req, output_q, rate_limiter, semaphore, config,
+                           guard, middleware_state)
+                )
+                pending.add(task)
+                task.add_done_callback(pending.discard)
+
+            if pending:
+                await asyncio.gather(*pending, return_exceptions=True)
+            if browser_open:
+                await browser.close()
 
 
 async def _dequeue(loop: asyncio.AbstractEventLoop, q: Queue, timeout: float):
@@ -109,17 +139,50 @@ async def _fetch(
     for attempt in range(attempts):
         try:
             result = await _fetch_once(browser, req, rate_limiter, config, guard, middleware_state)
-            # Only retry on error or timeout, not guard_failed or success
             if result.terminal not in ("error", "timeout") or attempt == attempts - 1:
                 break
         except Exception as exc:
             if attempt == attempts - 1:
                 result = Result(request=req, url=req.url, html="", terminal="error", error=exc)
-            # else: loop continues to retry
 
     result.duration_ms = int((time.monotonic() - start) * 1000)
     output_q.put(result)
     semaphore.release()
+
+
+async def _fetch_pooled(
+    page,
+    page_pool: asyncio.Queue,
+    req: Request,
+    output_q: Queue,
+    rate_limiter: RateLimiter,
+    config: WorkerConfig,
+    guard: State | None = None,
+    middleware_state: State | None = None,
+) -> None:
+    """Fetch using a pre-allocated page from the pool. Returns page to pool when done."""
+    start = time.monotonic()
+    attempts = 1 + max(0, req.retries)
+    result: Result | None = None
+
+    for attempt in range(attempts):
+        try:
+            result = await _fetch_once_on_page(page, req, rate_limiter, config, guard, middleware_state)
+            if result.terminal not in ("error", "timeout") or attempt == attempts - 1:
+                break
+        except Exception as exc:
+            if attempt == attempts - 1:
+                result = Result(request=req, url=req.url, html="", terminal="error", error=exc)
+
+    result.duration_ms = int((time.monotonic() - start) * 1000)
+    output_q.put(result)
+
+    # Reset page to blank before returning to pool
+    try:
+        await page.goto("about:blank", wait_until="domcontentloaded")
+    except Exception:
+        pass
+    await page_pool.put(page)
 
 
 async def _fetch_once(
@@ -135,49 +198,57 @@ async def _fetch_once(
     page = await ctx.new_page()
 
     try:
-        await rate_limiter.acquire(req.url)
-
-        # pre_actions run before goto (intercepts, cookie injection, viewport setup)
-        if req.pre_actions:
-            await pw.execute_actions(page, req.pre_actions)
-
-        final_url, response = await pw.navigate(page, req)
-
-        # Capture HTTP metadata from response
-        status = response.status if response else None
-        resp_headers = await response.all_headers() if response else {}
-
-        # Guard — fail fast if violated
-        if guard is not None:
-            guard_ok = await guard.check(page, response)
-            if not guard_ok:
-                html = await pw.extract_html(page, clean=req.clean_html)
-                return Result(
-                    request=req, url=final_url, html=html,
-                    status=status, headers=resp_headers,
-                    terminal="guard_failed",
-                )
-
-        # post-navigate actions run before the reconciler tick loop
-        if req.actions:
-            await pw.execute_actions(page, req.actions)
-
-        # Build effective state: middleware AND request state
-        state = _effective_state(req, middleware_state)
-
-        # Reconcile
-        terminal = await reconcile(page, response, state, timeout=req.timeout, tick_ms=req.tick_ms)
-
-        html = await pw.extract_html(page, clean=req.clean_html)
-        screenshot = await pw.take_screenshot(page) if req.screenshot else None
-
-        return Result(
-            request=req, url=final_url, html=html,
-            status=status, headers=resp_headers,
-            screenshot=screenshot, terminal=terminal,
-        )
+        return await _fetch_once_on_page(page, req, rate_limiter, config, guard, middleware_state)
     finally:
         await ctx.close()
+
+
+async def _fetch_once_on_page(
+    page,
+    req: Request,
+    rate_limiter: RateLimiter,
+    config: WorkerConfig,
+    guard: State | None = None,
+    middleware_state: State | None = None,
+) -> Result:
+    """Core fetch logic against an existing page object."""
+    await rate_limiter.acquire(req.url)
+
+    # pre_actions run before goto (intercepts, cookie injection, viewport setup)
+    if req.pre_actions:
+        await pw.execute_actions(page, req.pre_actions)
+
+    final_url, response = await pw.navigate(page, req)
+
+    status = response.status if response else None
+    resp_headers = await response.all_headers() if response else {}
+
+    # Guard — fail fast if violated
+    if guard is not None:
+        guard_ok = await guard.check(page, response)
+        if not guard_ok:
+            html = await pw.extract_html(page, clean=req.clean_html)
+            return Result(
+                request=req, url=final_url, html=html,
+                status=status, headers=resp_headers,
+                terminal="guard_failed",
+            )
+
+    # post-navigate actions run before the reconciler tick loop
+    if req.actions:
+        await pw.execute_actions(page, req.actions)
+
+    state = _effective_state(req, middleware_state)
+    terminal = await reconcile(page, response, state, timeout=req.timeout, tick_ms=req.tick_ms)
+
+    html = await pw.extract_html(page, clean=req.clean_html)
+    screenshot = await pw.take_screenshot(page) if req.screenshot else None
+
+    return Result(
+        request=req, url=final_url, html=html,
+        status=status, headers=resp_headers,
+        screenshot=screenshot, terminal=terminal,
+    )
 
 
 def _effective_state(req: Request, middleware_state: State | None) -> State:
