@@ -21,7 +21,7 @@ _SECTIONS: dict[str, tuple[str, type]] = {
 @dataclass
 class WorkerConfig:
     count: int = field(default_factory=cpu_count)
-    pages_per_worker: int = 5
+    page_limit: int = 5
     idle_timeout_secs: int = 300
     headless: bool = True
     user_agent: str | None = None

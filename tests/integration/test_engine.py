@@ -4,7 +4,8 @@ import pytest
 
 import yoink
 from yoink.engine import Engine
-from yoink.models import ExtractReq, RetryPolicy
+from yoink.models import Request
+from yoink.states import Selector
 
 
 def test_engine_single_url(local_server, test_config):
@@ -30,7 +31,7 @@ def test_engine_multiple_urls(local_server, test_config):
 
 
 def test_engine_clean_html(local_server, test_config):
-    req = ExtractReq(url=local_server + "/", clean_html=True)
+    req = Request(url=local_server + "/", clean_html=True)
     with Engine(test_config) as engine:
         engine.submit(req)
         result = next(engine.results())
@@ -42,7 +43,7 @@ def test_engine_clean_html(local_server, test_config):
 
 
 def test_engine_screenshot(local_server, test_config):
-    req = ExtractReq(url=local_server + "/", screenshot=True)
+    req = Request(url=local_server + "/", screenshot=True)
     with Engine(test_config) as engine:
         engine.submit(req)
         result = next(engine.results())
@@ -53,12 +54,8 @@ def test_engine_screenshot(local_server, test_config):
 
 
 def test_engine_error_returns_result_not_crash(test_config):
-    """A bad URL should produce ExtractResult(ok=False), not raise."""
-    req = ExtractReq(
-        url="http://127.0.0.1:1/",  # nothing listening
-        timeout=3.0,
-        retry=RetryPolicy(max_attempts=1),
-    )
+    """A bad URL should produce Result(ok=False), not raise."""
+    req = Request(url="http://127.0.0.1:1/", timeout=3.0)
     with Engine(test_config) as engine:
         engine.submit(req)
         result = next(engine.results())
@@ -67,8 +64,10 @@ def test_engine_error_returns_result_not_crash(test_config):
     assert result.error is not None
 
 
-def test_engine_css_selector_wait(local_server, test_config):
-    req = ExtractReq(url=local_server + "/", wait_for="#heading")
+def test_engine_selector_state(local_server, test_config):
+    """Selector state should resolve when #heading is in the DOM."""
+    req = Request(url=local_server + "/")
+    req.state = Selector("#heading")
     with Engine(test_config) as engine:
         engine.submit(req)
         result = next(engine.results())
@@ -77,10 +76,19 @@ def test_engine_css_selector_wait(local_server, test_config):
     assert "Yoink Test Page" in result.html
 
 
+def test_result_has_http_metadata(local_server, test_config):
+    """Result should carry status code and headers from the response."""
+    with Engine(test_config) as engine:
+        engine.submit(local_server + "/")
+        result = next(engine.results())
+
+    assert result.ok
+    assert result.status == 200
+    assert "content-type" in result.headers
+
+
 def test_public_api_get(local_server, test_config):
     """yoink.get() one-liner works end to end."""
-    import yoink
-    # Patch load_config so this test uses the test config
     original = yoink.load_config
     yoink.load_config = lambda *a, **kw: test_config
     try:
@@ -92,7 +100,6 @@ def test_public_api_get(local_server, test_config):
 
 def test_public_api_stream(local_server, test_config):
     """yoink.stream() yields results as they complete."""
-    import yoink
     original = yoink.load_config
     yoink.load_config = lambda *a, **kw: test_config
     try:

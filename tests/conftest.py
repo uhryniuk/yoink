@@ -57,6 +57,6 @@ def local_server() -> str:
 def test_config() -> Config:
     """Minimal Config suitable for tests — 1 worker, headless."""
     return Config(
-        workers=WorkerConfig(count=1, pages_per_worker=2, headless=True),
+        workers=WorkerConfig(count=1, page_limit=2, headless=True),
         rate_limit=RateLimitConfig(),
     )

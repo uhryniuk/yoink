@@ -7,15 +7,15 @@ import time
 from multiprocessing import Queue
 
 from playwright.async_api import async_playwright
-from tenacity import retry, stop_after_attempt, wait_exponential
 
 from yoink.config import WorkerConfig
 from yoink.drivers import playwright as pw
-from yoink.exceptions import ScraperError
-from yoink.models import ExtractReq, ExtractResult
+from yoink.models import Request, Result
 from yoink.rate_limiter import RateLimiter
+from yoink.reconciler import reconcile, _reset_state
+from yoink.states import DOMContentLoaded, State, TICK_MS
 
-# Sentinel pushed into the input queue to signal a worker to exit cleanly
+# Sentinel pushed into the input queue to signal a worker to exit cleanly.
 SENTINEL = None
 
 
@@ -24,9 +24,11 @@ def worker_main(
     output_q: Queue,
     config: WorkerConfig,
     rate_limiter: RateLimiter,
+    guard: State | None = None,
+    middleware_state: State | None = None,
 ) -> None:
-    """Entry point for each worker process. Called after spawn."""
-    asyncio.run(_run(input_q, output_q, config, rate_limiter))
+    """Entry point for each worker process. Called after spawn/forkserver."""
+    asyncio.run(_run(input_q, output_q, config, rate_limiter, guard, middleware_state))
 
 
 async def _run(
@@ -34,17 +36,19 @@ async def _run(
     output_q: Queue,
     config: WorkerConfig,
     rate_limiter: RateLimiter,
+    guard: State | None = None,
+    middleware_state: State | None = None,
 ) -> None:
     loop = asyncio.get_running_loop()
-    semaphore = asyncio.Semaphore(config.pages_per_worker)
+    semaphore = asyncio.Semaphore(config.page_limit)
     pending: set[asyncio.Task] = set()
 
     async with async_playwright() as p:
         browser = await pw.launch_browser(p, headless=config.headless)
+        browser_open = True
         idle_deadline = loop.time() + config.idle_timeout_secs
 
         while True:
-            # Non-blocking poll so we can check idle while tasks are running
             req = await _dequeue(loop, input_q, timeout=1.0)
 
             if req is SENTINEL:
@@ -52,17 +56,21 @@ async def _run(
 
             if req is None:
                 # Queue timeout — check idle browser shutdown
-                if not pending and loop.time() > idle_deadline:
+                if not pending and browser_open and loop.time() > idle_deadline:
                     await browser.close()
-                    browser = await pw.launch_browser(p, headless=config.headless)
-                    idle_deadline = loop.time() + config.idle_timeout_secs
+                    browser_open = False
                 continue
+
+            # Reopen browser if it was closed due to idle
+            if not browser_open:
+                browser = await pw.launch_browser(p, headless=config.headless)
+                browser_open = True
 
             idle_deadline = loop.time() + config.idle_timeout_secs
             await semaphore.acquire()
 
             task = asyncio.create_task(
-                _fetch(browser, req, output_q, rate_limiter, semaphore, config)
+                _fetch(browser, req, output_q, rate_limiter, semaphore, config, guard, middleware_state)
             )
             pending.add(task)
             task.add_done_callback(pending.discard)
@@ -71,7 +79,8 @@ async def _run(
         if pending:
             await asyncio.gather(*pending, return_exceptions=True)
 
-        await browser.close()
+        if browser_open:
+            await browser.close()
 
 
 async def _dequeue(loop: asyncio.AbstractEventLoop, q: Queue, timeout: float):
@@ -84,51 +93,81 @@ async def _dequeue(loop: asyncio.AbstractEventLoop, q: Queue, timeout: float):
 
 async def _fetch(
     browser,
-    req: ExtractReq,
+    req: Request,
     output_q: Queue,
     rate_limiter: RateLimiter,
     semaphore: asyncio.Semaphore,
     config: WorkerConfig,
+    guard: State | None = None,
+    middleware_state: State | None = None,
 ) -> None:
-    """Fetch one URL with retry, push ExtractResult to output_q."""
+    """Fetch one URL through the reconciler, push Result to output_q."""
     start = time.monotonic()
-    result = await _fetch_with_retry(browser, req, rate_limiter, config)
+
+    try:
+        result = await _fetch_once(browser, req, rate_limiter, config, guard, middleware_state)
+    except Exception as exc:
+        result = Result(request=req, url=req.url, html="", terminal="error", error=exc)
+
     result.duration_ms = int((time.monotonic() - start) * 1000)
     output_q.put(result)
     semaphore.release()
 
 
-async def _fetch_with_retry(
+async def _fetch_once(
     browser,
-    req: ExtractReq,
+    req: Request,
     rate_limiter: RateLimiter,
     config: WorkerConfig,
-) -> ExtractResult:
-    attempts = req.retry.max_attempts if req.retry.retry_on_scraper_error else 1
-
-    @retry(
-        stop=stop_after_attempt(attempts),
-        wait=wait_exponential(multiplier=req.retry.backoff_factor, min=1, max=30),
-        reraise=True,
-    )
-    async def _attempt() -> ExtractResult:
-        ctx = await pw.open_context(browser, req, user_agent=config.user_agent)
-        page = await ctx.new_page()
-        try:
-            await rate_limiter.acquire(req.url)
-            final_url = await pw.navigate(page, req)
-            html = await pw.extract_html(page, clean=req.clean_html)
-            screenshot = await pw.take_screenshot(page) if req.screenshot else None
-            return ExtractResult(
-                request=req,
-                url=final_url,
-                html=html,
-                screenshot=screenshot,
-            )
-        finally:
-            await ctx.close()
+    guard: State | None = None,
+    middleware_state: State | None = None,
+) -> Result:
+    """Single fetch attempt — navigate, run guard, reconcile state, extract HTML."""
+    ctx = await pw.open_context(browser, req, user_agent=config.user_agent)
+    page = await ctx.new_page()
 
     try:
-        return await _attempt()
-    except Exception as exc:
-        return ExtractResult(request=req, url=req.url, html="", error=exc)
+        await rate_limiter.acquire(req.url)
+        final_url, response = await pw.navigate(page, req)
+
+        # Capture HTTP metadata from response
+        status = response.status if response else None
+        resp_headers = await response.all_headers() if response else {}
+
+        # Guard — fail fast if violated
+        if guard is not None:
+            guard_ok = await guard.check(page, response)
+            if not guard_ok:
+                html = await pw.extract_html(page, clean=req.clean_html)
+                return Result(
+                    request=req, url=final_url, html=html,
+                    status=status, headers=resp_headers,
+                    terminal="guard_failed",
+                )
+
+        # Build effective state: middleware AND request state
+        state = _effective_state(req, middleware_state)
+
+        # Reconcile
+        tick_ms = getattr(req, "tick_ms", TICK_MS)
+        terminal = await reconcile(page, response, state, timeout=req.timeout, tick_ms=tick_ms)
+
+        html = await pw.extract_html(page, clean=req.clean_html)
+        screenshot = await pw.take_screenshot(page) if req.screenshot else None
+
+        return Result(
+            request=req, url=final_url, html=html,
+            status=status, headers=resp_headers,
+            screenshot=screenshot, terminal=terminal,
+        )
+    finally:
+        await ctx.close()
+
+
+def _effective_state(req: Request, middleware_state: State | None) -> State:
+    """Compose the per-request state with engine-level middleware state."""
+    req_state = getattr(req, "state", None) or DOMContentLoaded()
+
+    if middleware_state is not None:
+        return middleware_state & req_state
+    return req_state

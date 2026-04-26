@@ -10,7 +10,7 @@ class TestDefaults:
         import multiprocessing
         cfg = WorkerConfig()
         assert cfg.count == multiprocessing.cpu_count()
-        assert cfg.pages_per_worker == 5
+        assert cfg.page_limit == 5
         assert cfg.idle_timeout_secs == 300
         assert cfg.headless is True
         assert cfg.user_agent is None
@@ -44,7 +44,7 @@ headless = false
         assert cfg.workers.count == 2
         assert cfg.workers.headless is False
         # unset fields keep defaults
-        assert cfg.workers.pages_per_worker == 5
+        assert cfg.workers.page_limit == 5
 
     def test_load_rate_limit_per_domain(self, tmp_path):
         toml = tmp_path / "cfg.toml"

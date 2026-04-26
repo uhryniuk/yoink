@@ -90,7 +90,7 @@ def _cmd_scrape(args: argparse.Namespace) -> int:
     if args.workers:
         cfg.workers.count = args.workers
     if args.pages:
-        cfg.workers.pages_per_worker = args.pages
+        cfg.workers.page_limit = args.pages
 
     reqs = [ExtractReq(url=u) for u in urls]
 
