@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from urllib.parse import urlparse
+
 from playwright.async_api import Browser, BrowserContext, Page, Playwright, Response
 
 from yoink.common import clean_html as _clean_html
@@ -40,12 +42,22 @@ async def open_context(
             proxy["username"] = req.proxy.username
             proxy["password"] = req.proxy.password or ""
 
-    return await browser.new_context(
+    ctx = await browser.new_context(
         user_agent=user_agent or _DEFAULT_USER_AGENT,
         extra_http_headers=req.headers,
         proxy=proxy,
         ignore_https_errors=True,
     )
+
+    if req.cookies:
+        parsed = urlparse(req.url)
+        domain = parsed.hostname or ""
+        await ctx.add_cookies([
+            {"name": k, "value": v, "domain": domain, "path": "/"}
+            for k, v in req.cookies.items()
+        ])
+
+    return ctx
 
 
 async def navigate(page: Page, req: Request) -> tuple[str, Response | None]:

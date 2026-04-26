@@ -31,6 +31,7 @@ class Request:
     state: State | None = field(default=None, repr=False)
     tick_ms: int = TICK_MS
     retries: int = 0
+    cookies: dict[str, str] = field(default_factory=dict)
     pre_actions: list[Action] = field(default_factory=list, repr=False)
     actions: list[Action] = field(default_factory=list, repr=False)
 
@@ -45,6 +46,7 @@ class Request:
             "metadata": self.metadata,
             "tick_ms": self.tick_ms,
             "retries": self.retries,
+            "cookies": self.cookies,
         }
 
     def to_json(self) -> str:

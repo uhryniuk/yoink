@@ -28,6 +28,10 @@ class TestRequest:
         assert req.headers == {}
         assert req.metadata == {}
         assert req.proxy is None
+        assert req.cookies == {}
+        assert req.actions == []
+        assert req.pre_actions == []
+        assert req.retries == 0
 
     def test_json_roundtrip_minimal(self):
         req = Request(url="https://example.com")
@@ -51,6 +55,13 @@ class TestRequest:
         assert restored.metadata["job_id"] == "abc123"
         assert restored.screenshot is True
         assert restored.clean_html is True
+
+    def test_cookies_in_dict_and_roundtrip(self):
+        req = Request(url="https://example.com", cookies={"session": "abc123", "pref": "dark"})
+        d = req.to_dict()
+        assert d["cookies"] == {"session": "abc123", "pref": "dark"}
+        restored = Request.from_json(req.to_json())
+        assert restored.cookies == {"session": "abc123", "pref": "dark"}
 
     def test_from_dict_does_not_mutate_input(self):
         data = {
