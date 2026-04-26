@@ -88,11 +88,11 @@ def get(url: str, state: State | None = None, retries: int = 0, tick_ms: int = T
 
         html = yoink.get("https://example.com")
         html = yoink.get("https://example.com", state=Selector(".content"))
+        html = yoink.get("https://example.com", retries=2, cookies={"s": "abc"})
     """
-    req = Request(url=url, **kwargs)
+    req = Request(url=url, retries=retries, tick_ms=tick_ms, **kwargs)
     if state is not None:
         req.state = state
-    req.tick_ms = tick_ms
     cfg = load_config()
     cfg.workers.count = 1
     cfg.workers.page_limit = 1
@@ -129,10 +129,9 @@ def get_all(
         if isinstance(u, Request):
             reqs.append(u)
         else:
-            req = Request(url=u, **kwargs)
+            req = Request(url=u, retries=retries, tick_ms=tick_ms, **kwargs)
             if state is not None:
                 req.state = state
-            req.tick_ms = tick_ms
             reqs.append(req)
 
     with Engine(cfg) as engine:
@@ -160,9 +159,8 @@ def stream(
             if isinstance(u, Request):
                 engine.submit(u)
             else:
-                req = Request(url=u, **kwargs)
+                req = Request(url=u, retries=retries, tick_ms=tick_ms, **kwargs)
                 if state is not None:
                     req.state = state
-                req.tick_ms = tick_ms
                 engine.submit(req)
         yield from engine.results()
