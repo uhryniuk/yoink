@@ -234,14 +234,24 @@ class TimeDelay(State):
 
 
 class HTTPStatus(State):
-    """True when the navigation response status matches ``code``."""
+    """True when the navigation response status matches ``code``.
 
-    def __init__(self, code: int) -> None:
+    ``code`` can be an exact int or a callable that receives the status
+    and returns bool::
+
+        HTTPStatus(200)                         # exact match
+        HTTPStatus(lambda s: 200 <= s < 300)    # any 2xx
+        HTTPStatus(lambda s: s != 404)          # not found guard
+    """
+
+    def __init__(self, code) -> None:
         self.code = code
 
     async def check(self, page: Page, response: Response | None) -> bool:
         if response is None:
             return False
+        if callable(self.code):
+            return bool(self.code(response.status))
         return response.status == self.code
 
 

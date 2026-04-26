@@ -247,6 +247,23 @@ class TestHTTPStatus:
         page = make_page()
         assert await HTTPStatus(200).check(page, None) is False
 
+    @pytest.mark.asyncio
+    async def test_callable_true(self):
+        page = make_page()
+        resp = make_response(status=201)
+        assert await HTTPStatus(lambda s: 200 <= s < 300).check(page, resp) is True
+
+    @pytest.mark.asyncio
+    async def test_callable_false(self):
+        page = make_page()
+        resp = make_response(status=404)
+        assert await HTTPStatus(lambda s: 200 <= s < 300).check(page, resp) is False
+
+    @pytest.mark.asyncio
+    async def test_callable_no_response(self):
+        page = make_page()
+        assert await HTTPStatus(lambda s: s == 200).check(page, None) is False
+
 
 class TestResponseHeader:
     @pytest.mark.asyncio
