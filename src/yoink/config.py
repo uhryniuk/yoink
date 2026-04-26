@@ -26,6 +26,7 @@ class WorkerConfig:
     headless: bool = True
     user_agent: str | None = None
     persist_context: bool = False  # reuse one BrowserContext per worker (faster, less isolated)
+    viewport: dict | None = None   # e.g. {"width": 375, "height": 812} for mobile emulation
 
 
 @dataclass

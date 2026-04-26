@@ -21,9 +21,12 @@ from yoink.engine import Engine
 from yoink.models import ProxyConfig, Request, Result
 from yoink.states import (
     TICK_MS,
+    All,
+    Any,
     DOMContentLoaded,
     DOMStable,
     HTTPStatus,
+    MinCount,
     NetworkIdle,
     Not,
     ResponseHeader,
@@ -50,9 +53,12 @@ __all__ = [
     "stream",
     # States
     "State",
+    "All",
+    "Any",
     "DOMContentLoaded",
     "DOMStable",
     "HTTPStatus",
+    "MinCount",
     "NetworkIdle",
     "Not",
     "ResponseHeader",

@@ -7,11 +7,14 @@ from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 import pytest
 
 from yoink.states import (
+    All,
     AllState,
+    Any,
     AnyState,
     DOMContentLoaded,
     DOMStable,
     HTTPStatus,
+    MinCount,
     NetworkIdle,
     Not,
     ResponseHeader,
@@ -331,3 +334,82 @@ class TestURLMatches:
     async def test_no_match(self):
         page = make_page(url="https://example.com/login")
         assert await URLMatches(r"/products").check(page, None) is False
+
+
+class TestMinCount:
+    @pytest.mark.asyncio
+    async def test_at_threshold(self):
+        page = make_page(locator_count=5)
+        assert await MinCount(".card", n=5).check(page, None) is True
+
+    @pytest.mark.asyncio
+    async def test_above_threshold(self):
+        page = make_page(locator_count=10)
+        assert await MinCount(".card", n=5).check(page, None) is True
+
+    @pytest.mark.asyncio
+    async def test_below_threshold(self):
+        page = make_page(locator_count=3)
+        assert await MinCount(".card", n=5).check(page, None) is False
+
+    @pytest.mark.asyncio
+    async def test_default_n_is_one(self):
+        page = make_page(locator_count=1)
+        assert await MinCount(".card").check(page, None) is True
+
+    @pytest.mark.asyncio
+    async def test_zero_count(self):
+        page = make_page(locator_count=0)
+        assert await MinCount(".card", n=1).check(page, None) is False
+
+
+class TestAllConstructor:
+    @pytest.mark.asyncio
+    async def test_single_state(self):
+        page = make_page(locator_count=1)
+        s = All(Selector(".x"))
+        assert await s.check(page, None) is True
+
+    def test_empty_raises(self):
+        with pytest.raises(ValueError):
+            All()
+
+    def test_two_states_returns_allstate(self):
+        s = All(Selector(".a"), Selector(".b"))
+        assert isinstance(s, AllState)
+
+    def test_three_states_composes(self):
+        s = All(Selector(".a"), Selector(".b"), Selector(".c"))
+        # All(a, b, c) == (a & b) & c
+        assert isinstance(s, AllState)
+
+    @pytest.mark.asyncio
+    async def test_all_must_pass(self):
+        # locator_count applies to all selectors in mock
+        page = make_page(locator_count=1)
+        s = All(Selector(".a"), Selector(".b"), Selector(".c"))
+        # AllState is sequential: left first
+        # Both .a and .b resolve → True
+        assert await s.check(page, None) is True
+
+
+class TestAnyConstructor:
+    @pytest.mark.asyncio
+    async def test_single_state(self):
+        page = make_page(locator_count=0)
+        s = Any(Selector(".x"))
+        assert await s.check(page, None) is False
+
+    def test_empty_raises(self):
+        with pytest.raises(ValueError):
+            Any()
+
+    def test_two_states_returns_anystate(self):
+        s = Any(Selector(".a"), Selector(".b"))
+        assert isinstance(s, AnyState)
+
+    @pytest.mark.asyncio
+    async def test_first_wins(self):
+        page = make_page(locator_count=1)
+        s = Any(Selector(".a"), Selector(".missing"))
+        assert await s.check(page, None) is True

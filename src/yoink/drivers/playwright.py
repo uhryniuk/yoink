@@ -33,6 +33,7 @@ async def open_context(
     browser: Browser,
     req: Request,
     user_agent: str | None = None,
+    viewport: dict | None = None,
 ) -> BrowserContext:
     """Open an isolated browser context configured from the request."""
     proxy = None
@@ -47,6 +48,7 @@ async def open_context(
         extra_http_headers=req.headers,
         proxy=proxy,
         ignore_https_errors=True,
+        viewport=viewport,
     )
 
     if req.cookies:

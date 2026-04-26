@@ -49,7 +49,8 @@ async def _run(
             # One shared context per worker — pages are pre-allocated and reused.
             # Skips ~50ms new_context() overhead per request at the cost of session isolation.
             shared_ctx = await pw.open_context(
-                browser, Request(url=""), user_agent=config.user_agent
+                browser, Request(url=""), user_agent=config.user_agent,
+                viewport=config.viewport,
             )
             page_pool: asyncio.Queue = asyncio.Queue()
             for _ in range(config.page_limit):
@@ -194,7 +195,7 @@ async def _fetch_once(
     middleware_state: State | None = None,
 ) -> Result:
     """Single fetch attempt — pre_actions, navigate, actions, reconcile, extract HTML."""
-    ctx = await pw.open_context(browser, req, user_agent=config.user_agent)
+    ctx = await pw.open_context(browser, req, user_agent=config.user_agent, viewport=config.viewport)
     page = await ctx.new_page()
 
     try:

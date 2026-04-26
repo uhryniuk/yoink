@@ -202,6 +202,23 @@ class Selector(State):
         return await page.locator(self.css).count() > 0
 
 
+class MinCount(State):
+    """True when at least ``n`` elements match the CSS selector.
+
+    Useful for lazy-loaded grids where you want to wait until a meaningful
+    number of items have appeared::
+
+        MinCount(".product-card", 50)  # wait for 50+ product cards
+    """
+
+    def __init__(self, css: str, n: int = 1) -> None:
+        self.css = css
+        self.n = n
+
+    async def check(self, page: Page, response: Response | None) -> bool:
+        return await page.locator(self.css).count() >= self.n
+
+
 class SubstringMatch(State):
     """True when ``text`` appears in the page.
 
@@ -298,3 +315,37 @@ class URLMatches(State):
 
     async def check(self, page: Page, response: Response | None) -> bool:
         return self._re.search(page.url) is not None
+
+
+# ---------------------------------------------------------------------------
+# Multi-state convenience constructors
+# ---------------------------------------------------------------------------
+
+def All(*states: State) -> State:
+    """All states must resolve (sequential left-to-right).
+
+    Equivalent to ``a & b & c`` but readable with many states::
+
+        All(NetworkIdle(), Selector(".data"), MinCount(".row", 5))
+    """
+    if not states:
+        raise ValueError("All() requires at least one state")
+    result = states[0]
+    for s in states[1:]:
+        result = result & s
+    return result
+
+
+def Any(*states: State) -> State:
+    """First state to resolve wins (concurrent evaluation).
+
+    Equivalent to ``a | b | c``::
+
+        Any(Selector(".loaded"), TimeDelay(5000))
+    """
+    if not states:
+        raise ValueError("Any() requires at least one state")
+    result = states[0]
+    for s in states[1:]:
+        result = result | s
+    return result
