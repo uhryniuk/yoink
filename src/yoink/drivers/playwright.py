@@ -71,3 +71,9 @@ async def extract_html(page: Page, clean: bool = False) -> str:
 async def take_screenshot(page: Page) -> bytes:
     """Return a full-page PNG screenshot as bytes."""
     return await page.screenshot(full_page=True, animations="disabled")
+
+
+async def execute_actions(page: Page, actions: list) -> None:
+    """Run a sequence of Action objects against the page in order."""
+    for action in actions:
+        await action.run(page)

@@ -4,6 +4,18 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Iterator
 
+from yoink.actions import (
+    Action,
+    Click,
+    EvaluateJS,
+    Fill,
+    Hover,
+    PressKey,
+    Scroll,
+    ScrollToBottom,
+    SelectOption,
+    Wait,
+)
 from yoink.config import Config, load_config
 from yoink.engine import Engine
 from yoink.models import ProxyConfig, Request, Result
@@ -49,6 +61,17 @@ __all__ = [
     "TimeDelay",
     "URLMatches",
     "TICK_MS",
+    # Actions
+    "Action",
+    "Click",
+    "EvaluateJS",
+    "Fill",
+    "Hover",
+    "PressKey",
+    "Scroll",
+    "ScrollToBottom",
+    "SelectOption",
+    "Wait",
 ]
 
 

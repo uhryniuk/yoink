@@ -3,7 +3,13 @@ from __future__ import annotations
 import dataclasses
 import json
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+from yoink.states import TICK_MS
+
+if TYPE_CHECKING:
+    from yoink.actions import Action
+    from yoink.states import State
 
 
 @dataclass
@@ -22,16 +28,30 @@ class Request:
     screenshot: bool = False
     clean_html: bool = False
     metadata: dict[str, Any] = field(default_factory=dict)
+    state: State | None = field(default=None, repr=False)
+    tick_ms: int = TICK_MS
+    retries: int = 0
+    pre_actions: list[Action] = field(default_factory=list, repr=False)
+    actions: list[Action] = field(default_factory=list, repr=False)
 
     def to_dict(self) -> dict[str, Any]:
-        return dataclasses.asdict(self)
+        return {
+            "url": self.url,
+            "timeout": self.timeout,
+            "proxy": dataclasses.asdict(self.proxy) if self.proxy else None,
+            "headers": self.headers,
+            "screenshot": self.screenshot,
+            "clean_html": self.clean_html,
+            "metadata": self.metadata,
+            "tick_ms": self.tick_ms,
+            "retries": self.retries,
+        }
 
     def to_json(self) -> str:
         return json.dumps(self.to_dict())
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Request:
-        # Don't mutate the caller's dict
         data = dict(data)
         proxy_data = data.pop("proxy", None)
         proxy = ProxyConfig(**proxy_data) if proxy_data else None

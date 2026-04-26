@@ -13,7 +13,7 @@ from yoink.drivers import playwright as pw
 from yoink.models import Request, Result
 from yoink.rate_limiter import RateLimiter
 from yoink.reconciler import reconcile, _reset_state
-from yoink.states import DOMContentLoaded, State, TICK_MS
+from yoink.states import DOMContentLoaded, State
 
 # Sentinel pushed into the input queue to signal a worker to exit cleanly.
 SENTINEL = None
@@ -122,12 +122,17 @@ async def _fetch_once(
     guard: State | None = None,
     middleware_state: State | None = None,
 ) -> Result:
-    """Single fetch attempt — navigate, run guard, reconcile state, extract HTML."""
+    """Single fetch attempt — pre_actions, navigate, actions, reconcile, extract HTML."""
     ctx = await pw.open_context(browser, req, user_agent=config.user_agent)
     page = await ctx.new_page()
 
     try:
         await rate_limiter.acquire(req.url)
+
+        # pre_actions run before goto (intercepts, cookie injection, viewport setup)
+        if req.pre_actions:
+            await pw.execute_actions(page, req.pre_actions)
+
         final_url, response = await pw.navigate(page, req)
 
         # Capture HTTP metadata from response
@@ -145,12 +150,15 @@ async def _fetch_once(
                     terminal="guard_failed",
                 )
 
+        # post-navigate actions run before the reconciler tick loop
+        if req.actions:
+            await pw.execute_actions(page, req.actions)
+
         # Build effective state: middleware AND request state
         state = _effective_state(req, middleware_state)
 
         # Reconcile
-        tick_ms = getattr(req, "tick_ms", TICK_MS)
-        terminal = await reconcile(page, response, state, timeout=req.timeout, tick_ms=tick_ms)
+        terminal = await reconcile(page, response, state, timeout=req.timeout, tick_ms=req.tick_ms)
 
         html = await pw.extract_html(page, clean=req.clean_html)
         screenshot = await pw.take_screenshot(page) if req.screenshot else None
@@ -166,7 +174,7 @@ async def _fetch_once(
 
 def _effective_state(req: Request, middleware_state: State | None) -> State:
     """Compose the per-request state with engine-level middleware state."""
-    req_state = getattr(req, "state", None) or DOMContentLoaded()
+    req_state = req.state or DOMContentLoaded()
 
     if middleware_state is not None:
         return middleware_state & req_state
