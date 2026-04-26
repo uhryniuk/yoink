@@ -13,10 +13,12 @@ from yoink.actions import (
     Fill,
     Hover,
     PressKey,
+    RouteBlock,
     Scroll,
     ScrollToBottom,
     SelectOption,
     Wait,
+    WaitForSelector,
 )
 
 
@@ -320,6 +322,62 @@ class TestActionsOnRequest:
 # ---------------------------------------------------------------------------
 # Integration: execute_actions driver helper
 # ---------------------------------------------------------------------------
+
+class TestWaitForSelector:
+    @pytest.mark.asyncio
+    async def test_waits_for_selector(self):
+        page = make_page()
+        page.wait_for_selector = AsyncMock()
+        await WaitForSelector(selector=".modal", timeout_ms=3000).run(page)
+        page.wait_for_selector.assert_awaited_once_with(".modal", timeout=3000)
+
+    def test_default_timeout(self):
+        w = WaitForSelector(selector=".x")
+        assert w.timeout_ms == 5000
+
+
+class TestRouteBlock:
+    @pytest.mark.asyncio
+    async def test_blocks_single_pattern(self):
+        page = make_page()
+        page.route = AsyncMock()
+        await RouteBlock("**/ads/**").run(page)
+        assert page.route.call_count == 1
+        call_args = page.route.call_args_list[0]
+        assert call_args[0][0] == "**/ads/**"
+
+    @pytest.mark.asyncio
+    async def test_blocks_multiple_patterns(self):
+        page = make_page()
+        page.route = AsyncMock()
+        await RouteBlock("**/ads/**", "**/analytics/**", "**gtm**").run(page)
+        assert page.route.call_count == 3
+        patterns = [c[0][0] for c in page.route.call_args_list]
+        assert "**/ads/**" in patterns
+        assert "**/analytics/**" in patterns
+        assert "**gtm**" in patterns
+
+    @pytest.mark.asyncio
+    async def test_route_handler_aborts(self):
+        page = make_page()
+        captured_handler = None
+
+        async def capture_route(pattern, handler):
+            nonlocal captured_handler
+            captured_handler = handler
+
+        page.route = AsyncMock(side_effect=capture_route)
+        await RouteBlock("**/ads/**").run(page)
+
+        # The handler should call route.abort()
+        mock_route = AsyncMock()
+        await captured_handler(mock_route)
+        mock_route.abort.assert_awaited_once()
+
+    def test_no_patterns_noop(self):
+        rb = RouteBlock()
+        assert rb.patterns == ()
+
 
 class TestExecuteActions:
     @pytest.mark.asyncio

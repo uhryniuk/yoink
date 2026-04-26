@@ -150,3 +150,50 @@ class EvaluateJS(Action):
 
     async def run(self, page: Page) -> None:
         await page.evaluate(self.expression)
+
+
+@dataclass
+class WaitForSelector(Action):
+    """Wait for an element to appear using Playwright's event-driven API.
+
+    More efficient than polling with Selector state when you need to wait
+    for an element as part of an action sequence (e.g., wait for modal
+    to open before clicking a button inside it).
+
+    Raises PlaywrightTimeoutError if the selector does not appear within
+    ``timeout_ms``.
+    """
+
+    selector: str
+    timeout_ms: int = 5000
+
+    async def run(self, page: Page) -> None:
+        await page.wait_for_selector(self.selector, timeout=self.timeout_ms)
+
+
+@dataclass
+class RouteBlock(Action):
+    """Block network requests matching URL patterns before navigation.
+
+    Use as a pre_action to block ads, analytics, and third-party trackers
+    to speed up page loads::
+
+        req = Request(
+            url="https://shop.example.com",
+            pre_actions=[RouteBlock("**/ads/**", "**/analytics/**", "**googletagmanager**")],
+        )
+
+    Patterns support glob syntax (``**`` matches any path segment).
+    """
+
+    patterns: tuple[str, ...]
+
+    def __init__(self, *patterns: str) -> None:
+        self.patterns = patterns
+
+    async def run(self, page: Page) -> None:
+        async def _abort(route):
+            await route.abort()
+
+        for pattern in self.patterns:
+            await page.route(pattern, _abort)

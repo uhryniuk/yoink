@@ -11,10 +11,12 @@ from yoink.actions import (
     Fill,
     Hover,
     PressKey,
+    RouteBlock,
     Scroll,
     ScrollToBottom,
     SelectOption,
     Wait,
+    WaitForSelector,
 )
 from yoink.config import Config, load_config
 from yoink.engine import Engine
@@ -74,10 +76,12 @@ __all__ = [
     "Fill",
     "Hover",
     "PressKey",
+    "RouteBlock",
     "Scroll",
     "ScrollToBottom",
     "SelectOption",
     "Wait",
+    "WaitForSelector",
 ]
 
 
