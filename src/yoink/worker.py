@@ -101,13 +101,21 @@ async def _fetch(
     guard: State | None = None,
     middleware_state: State | None = None,
 ) -> None:
-    """Fetch one URL through the reconciler, push Result to output_q."""
+    """Fetch one URL, retrying up to req.retries times on error or timeout."""
     start = time.monotonic()
+    attempts = 1 + max(0, req.retries)
+    result: Result | None = None
 
-    try:
-        result = await _fetch_once(browser, req, rate_limiter, config, guard, middleware_state)
-    except Exception as exc:
-        result = Result(request=req, url=req.url, html="", terminal="error", error=exc)
+    for attempt in range(attempts):
+        try:
+            result = await _fetch_once(browser, req, rate_limiter, config, guard, middleware_state)
+            # Only retry on error or timeout, not guard_failed or success
+            if result.terminal not in ("error", "timeout") or attempt == attempts - 1:
+                break
+        except Exception as exc:
+            if attempt == attempts - 1:
+                result = Result(request=req, url=req.url, html="", terminal="error", error=exc)
+            # else: loop continues to retry
 
     result.duration_ms = int((time.monotonic() - start) * 1000)
     output_q.put(result)
