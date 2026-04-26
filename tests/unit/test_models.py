@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from yoink.models import Action, ExtractReq, ExtractResult, ProxyConfig, RetryPolicy
+from yoink.models import Action, ProxyConfig, Request, Result, RetryPolicy
 
 
 class TestRetryPolicy:
@@ -44,84 +44,93 @@ class TestAction:
         assert a.duration_ms == 500
 
 
-class TestExtractReq:
+class TestRequest:
     def test_defaults(self):
-        req = ExtractReq(url="https://example.com")
-        assert req.wait_for == "domcontentloaded"
+        req = Request(url="https://example.com")
         assert req.timeout == 30.0
         assert req.screenshot is False
         assert req.clean_html is False
         assert req.headers == {}
-        assert req.actions == []
         assert req.metadata == {}
         assert req.proxy is None
 
     def test_json_roundtrip_minimal(self):
-        req = ExtractReq(url="https://example.com")
-        restored = ExtractReq.from_json(req.to_json())
+        req = Request(url="https://example.com")
+        restored = Request.from_json(req.to_json())
         assert restored.url == req.url
-        assert restored.wait_for == req.wait_for
         assert restored.timeout == req.timeout
 
     def test_json_roundtrip_full(self):
-        req = ExtractReq(
+        req = Request(
             url="https://example.com",
             proxy=ProxyConfig(server="http://p:8080", username="u", password="pw"),
-            actions=[
-                Action(type="click", selector="//button"),
-                Action(type="wait", duration_ms=200),
-            ],
             headers={"X-Custom": "value"},
             metadata={"job_id": "abc123"},
             screenshot=True,
             clean_html=True,
         )
-        restored = ExtractReq.from_json(req.to_json())
+        restored = Request.from_json(req.to_json())
         assert restored.proxy.server == "http://p:8080"
         assert restored.proxy.username == "u"
-        assert len(restored.actions) == 2
-        assert restored.actions[0].selector == "//button"
-        assert restored.actions[1].duration_ms == 200
         assert restored.headers == {"X-Custom": "value"}
         assert restored.metadata["job_id"] == "abc123"
         assert restored.screenshot is True
         assert restored.clean_html is True
 
-    def test_from_dict_preserves_unknown_metadata(self):
-        req = ExtractReq(url="https://x.com", metadata={"_request_id": "xyz"})
-        d = req.to_dict()
-        restored = ExtractReq.from_dict(d)
-        assert restored.metadata["_request_id"] == "xyz"
+    def test_from_dict_does_not_mutate_input(self):
+        data = {
+            "url": "https://x.com",
+            "proxy": {"server": "http://p:8080"},
+            "metadata": {"_request_id": "xyz"},
+        }
+        original_proxy = data["proxy"]
+        Request.from_dict(data)
+        # The caller's dict should be untouched
+        assert "proxy" in data
+        assert data["proxy"] is original_proxy
 
 
-class TestExtractResult:
-    def test_ok_true(self):
-        req = ExtractReq(url="https://example.com")
-        r = ExtractResult(request=req, url="https://example.com", html="<html/>")
+class TestResult:
+    def test_ok_on_success(self):
+        req = Request(url="https://example.com")
+        r = Result(request=req, url="https://example.com", html="<html/>")
         assert r.ok is True
+        assert r.terminal == "success"
         assert r.error is None
 
-    def test_ok_false(self):
-        req = ExtractReq(url="https://example.com")
-        r = ExtractResult(request=req, url="https://example.com", html="", error=RuntimeError("boom"))
+    def test_ok_false_on_timeout(self):
+        req = Request(url="https://example.com")
+        r = Result(request=req, url="https://example.com", html="", terminal="timeout")
+        assert r.ok is False
+
+    def test_ok_false_on_error(self):
+        req = Request(url="https://example.com")
+        r = Result(
+            request=req, url="https://example.com", html="",
+            terminal="error", error=RuntimeError("boom"),
+        )
         assert r.ok is False
 
     def test_to_dict_keys(self):
-        req = ExtractReq(url="https://example.com")
-        r = ExtractResult(request=req, url="https://example.com", html="<p>hi</p>", duration_ms=42)
+        req = Request(url="https://example.com")
+        r = Result(request=req, url="https://example.com", html="<p>hi</p>", duration_ms=42)
         d = r.to_dict()
-        assert set(d.keys()) == {"url", "html", "screenshot", "duration_ms", "error", "ok", "request"}
+        assert set(d.keys()) == {
+            "url", "html", "status", "headers", "screenshot",
+            "duration_ms", "terminal", "ok", "error", "request",
+        }
         assert d["ok"] is True
         assert d["duration_ms"] == 42
         assert d["screenshot"] is None
+        assert d["terminal"] == "success"
 
     def test_to_json_is_valid(self):
-        req = ExtractReq(url="https://example.com")
-        r = ExtractResult(request=req, url="https://example.com", html="<p/>")
+        req = Request(url="https://example.com")
+        r = Result(request=req, url="https://example.com", html="<p/>")
         parsed = json.loads(r.to_json())
         assert parsed["url"] == "https://example.com"
 
     def test_screenshot_hex_in_dict(self):
-        req = ExtractReq(url="https://example.com")
-        r = ExtractResult(request=req, url="https://example.com", html="", screenshot=b"\x89PNG")
+        req = Request(url="https://example.com")
+        r = Result(request=req, url="https://example.com", html="", screenshot=b"\x89PNG")
         assert r.to_dict()["screenshot"] == b"\x89PNG".hex()

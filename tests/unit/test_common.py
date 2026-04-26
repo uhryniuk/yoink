@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from yoink.common import clean_html, is_valid_html, is_valid_url, load_urls_from_json, load_urls_from_txt
+from yoink.common import clean_html, is_valid_url, load_urls_from_json, load_urls_from_txt
 
 
 class TestIsValidUrl:
@@ -34,17 +34,6 @@ class TestIsValidUrl:
 
     def test_missing_host_fails(self):
         assert not is_valid_url("https://")
-
-
-class TestIsValidHtml:
-    def test_full_document(self):
-        assert is_valid_html("<html><body><p>Hello</p></body></html>")
-
-    def test_fragment(self):
-        assert is_valid_html("<div>hi</div>")
-
-    def test_empty_string(self):
-        assert is_valid_html("")  # parseable, just empty
 
 
 class TestCleanHtml:

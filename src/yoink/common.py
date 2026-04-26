@@ -7,8 +7,8 @@ from bs4 import BeautifulSoup
 
 def clean_html(
     html_to_clean: str,
-    tags_to_remove: list[str] = ["style", "svg", "script"],
-    attributes_to_keep: list[str] = ["id", "href"],
+    tags_to_remove: list[str] | None = None,
+    attributes_to_keep: list[str] | None = None,
 ) -> str:
     """Clean HTML by removing specified tags and stripping non-essential attributes.
 
@@ -22,12 +22,25 @@ def clean_html(
     Returns:
         Cleaned HTML string.
     """
-    for tag in tags_to_remove:
-        html_to_clean = re.sub(rf"<{tag}[^>]*>.*?</{tag}>", "", html_to_clean, flags=re.DOTALL)
+    if tags_to_remove is None:
+        tags_to_remove = ["style", "svg", "script"]
+    if attributes_to_keep is None:
+        attributes_to_keep = ["id", "href"]
 
-    kept = "|".join(attributes_to_keep)
-    pattern = rf'\b(?!({kept})\b)\w+(?:-\w+)?\s*=\s*["\'][^"\']*["\']'
-    return re.sub(pattern, "", html_to_clean)
+    soup = BeautifulSoup(html_to_clean, "html.parser")
+
+    for tag_name in tags_to_remove:
+        for tag in soup.find_all(tag_name):
+            tag.decompose()
+
+    keep = set(attributes_to_keep)
+    for tag in soup.find_all(True):
+        attrs = dict(tag.attrs)
+        for attr in attrs:
+            if attr not in keep:
+                del tag[attr]
+
+    return str(soup)
 
 
 def is_valid_url(url: str) -> bool:
@@ -43,15 +56,6 @@ def is_valid_url(url: str) -> bool:
         re.IGNORECASE,
     )
     return re.match(regex, url) is not None
-
-
-def is_valid_html(html: str) -> bool:
-    """Return True if html can be parsed by BeautifulSoup."""
-    try:
-        BeautifulSoup(html, "html.parser")
-        return True
-    except Exception:
-        return False
 
 
 def load_urls_from_txt(path: Path) -> list[str]:
