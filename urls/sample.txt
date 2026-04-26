@@ -1,0 +1,10 @@
+https://greatape.dev
+https://sillytalk.greatape.dev
+https://example.com
+https://example.org
+https://httpbin.org/get
+https://httpbin.org/html
+https://httpbin.org/json
+https://httpbin.org/status/200
+https://quotes.toscrape.com
+https://books.toscrape.com
