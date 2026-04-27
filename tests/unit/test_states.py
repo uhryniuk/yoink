@@ -1,8 +1,7 @@
 """Unit tests for the State composition system."""
 
 import asyncio
-import time
-from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -12,19 +11,15 @@ from yoink.states import (
     Any,
     AnyState,
     DOMContentLoaded,
-    DOMStable,
     HTTPStatus,
     MinCount,
-    NetworkIdle,
     Not,
     ResponseHeader,
     Selector,
-    State,
     SubstringMatch,
     TimeDelay,
     URLMatches,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers

@@ -119,10 +119,12 @@ def get_all(
     Accepts a mix of URL strings and Request objects::
 
         results = yoink.get_all(["https://a.com", "https://b.com"], workers=4)
-        results = yoink.get_all([
-            Request("https://a.com", state=Selector(".a")),
-            Request("https://b.com", state=Selector(".b")),
-        ])
+        results = yoink.get_all(
+            [
+                Request("https://a.com", state=Selector(".a")),
+                Request("https://b.com", state=Selector(".b")),
+            ]
+        )
     """
     cfg = load_config()
     if workers is not None:
@@ -152,8 +154,8 @@ def stream(
 ) -> Iterator[Result]:
     """Fetch URLs and yield results as each completes.
 
-        for result in yoink.stream(urls, workers=4, state=Selector(".data")):
-            print(result.url, len(result.html))
+    for result in yoink.stream(urls, workers=4, state=Selector(".data")):
+        print(result.url, len(result.html))
     """
     cfg = load_config()
     if workers is not None:

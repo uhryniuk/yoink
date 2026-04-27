@@ -4,10 +4,8 @@ Run:
     uv run python examples/quickstart.py
 """
 
-import sys
-
 import yoink
-from yoink import Engine, Request, Selector, NetworkIdle, HTTPStatus, load_config
+from yoink import Engine, HTTPStatus, NetworkIdle, Request, Selector, load_config
 
 
 def demo_get():

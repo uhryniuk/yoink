@@ -1,7 +1,5 @@
 """Integration tests for Engine — real Playwright against a local HTTP server."""
 
-import pytest
-
 import yoink
 from yoink.engine import Engine
 from yoink.models import Request

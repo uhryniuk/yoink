@@ -79,4 +79,4 @@ def load_urls_from_json(path: Path) -> list[str]:
         return [str(x) for x in data]
     if isinstance(data, dict) and "urls" in data and isinstance(data["urls"], list):
         return [str(x) for x in data["urls"]]
-    raise ValueError(f"Unsupported JSON format in {path}: expected a list or {{\"urls\": [...]}}")
+    raise ValueError(f'Unsupported JSON format in {path}: expected a list or {{"urls": [...]}}')

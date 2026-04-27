@@ -12,7 +12,7 @@ import time
 
 from playwright.async_api import Page, Response
 
-from yoink.states import AllState, AnyState, State, TICK_MS
+from yoink.states import TICK_MS, State
 
 
 def _reset_state(state: State) -> None:

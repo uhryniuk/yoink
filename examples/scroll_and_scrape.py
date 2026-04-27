@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import yoink
 from yoink import (
-    Click,
     EvaluateJS,
     Request,
     Scroll,

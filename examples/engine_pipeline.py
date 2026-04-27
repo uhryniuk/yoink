@@ -13,7 +13,6 @@ from __future__ import annotations
 import json
 import sys
 
-import yoink
 from yoink import Engine, HTTPStatus, NetworkIdle, Request, Selector, load_config
 from yoink.common import is_valid_url
 
@@ -25,6 +24,7 @@ def load_urls(args: list[str]) -> list[str]:
     urls = []
     for arg in args:
         from pathlib import Path
+
         p = Path(arg)
         if p.exists():
             urls.extend(line.strip() for line in p.read_text().splitlines() if line.strip())

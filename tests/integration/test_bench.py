@@ -8,14 +8,13 @@ Tests are auto-skipped when the bench stack is not reachable.
 
 from __future__ import annotations
 
-import urllib.request
 import urllib.error
+import urllib.request
 
 import pytest
 
 import yoink
 from yoink import (
-    Click,
     EvaluateJS,
     Request,
     Scroll,
@@ -63,6 +62,7 @@ def bench_config(workers=1, pages=1):
 # ---------------------------------------------------------------------------
 # bench-static: basic HTML pages
 # ---------------------------------------------------------------------------
+
 
 @bench_static
 def test_static_product_page_loads():
@@ -112,6 +112,7 @@ def test_static_scroll_and_scrape():
 # bench-react: SPA with lazy-loaded products
 # ---------------------------------------------------------------------------
 
+
 @bench_react
 def test_react_home_page_loads():
     result = yoink.get(f"{REACT_URL}/", state=Selector("h2"))
@@ -129,8 +130,9 @@ def test_react_products_first_batch():
 @bench_react
 def test_react_products_all_batches():
     """Wait for all 3 batches to load by checking for 60+ cards."""
-    from yoink.states import State
     from playwright.async_api import Page, Response
+
+    from yoink.states import State
 
     class MinCards(State):
         def __init__(self, n: int):
@@ -226,6 +228,7 @@ def test_react_concurrent_pages():
 # ---------------------------------------------------------------------------
 # bench-slow: timeout and delay handling
 # ---------------------------------------------------------------------------
+
 
 @bench_slow
 def test_slow_zero_delay():

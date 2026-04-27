@@ -1,20 +1,17 @@
 """Unit tests for the reconciler tick loop."""
 
-import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from yoink.reconciler import reconcile, _reset_state
+from yoink.reconciler import _reset_state, reconcile
 from yoink.states import (
-    AllState,
     DOMContentLoaded,
     HTTPStatus,
     Selector,
     State,
     TimeDelay,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers

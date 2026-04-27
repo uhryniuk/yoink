@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import patch
 
 import yoink
 from yoink import Request, Selector
@@ -51,10 +49,18 @@ class TestGet:
         class FakeEngine:
             def __init__(self, cfg, **kw):
                 pass
-            def __enter__(self): return self
-            def __exit__(self, *a): pass
-            def submit(self, req): captured.append(req)
-            def results(self): yield result
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                pass
+
+            def submit(self, req):
+                captured.append(req)
+
+            def results(self):
+                yield result
 
         with patch("yoink.Engine", FakeEngine):
             yoink.get("https://example.com", tick_ms=50)
@@ -66,11 +72,20 @@ class TestGet:
         captured = []
 
         class FakeEngine:
-            def __init__(self, cfg, **kw): pass
-            def __enter__(self): return self
-            def __exit__(self, *a): pass
-            def submit(self, req): captured.append(req)
-            def results(self): yield result
+            def __init__(self, cfg, **kw):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                pass
+
+            def submit(self, req):
+                captured.append(req)
+
+            def results(self):
+                yield result
 
         s = Selector(".x")
         with patch("yoink.Engine", FakeEngine):
@@ -83,11 +98,20 @@ class TestGet:
         captured = []
 
         class FakeEngine:
-            def __init__(self, cfg, **kw): pass
-            def __enter__(self): return self
-            def __exit__(self, *a): pass
-            def submit(self, req): captured.append(req)
-            def results(self): yield result
+            def __init__(self, cfg, **kw):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                pass
+
+            def submit(self, req):
+                captured.append(req)
+
+            def results(self):
+                yield result
 
         with patch("yoink.Engine", FakeEngine):
             yoink.get("https://example.com", cookies={"s": "abc"}, clean_html=True)
@@ -103,9 +127,15 @@ class TestGetAll:
         captured = []
 
         class FakeEngine:
-            def __init__(self, cfg, **kw): pass
-            def __enter__(self): return self
-            def __exit__(self, *a): pass
+            def __init__(self, cfg, **kw):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                pass
+
             def stream(self, reqs):
                 captured.extend(reqs)
                 return iter(results_list)
@@ -121,9 +151,15 @@ class TestGetAll:
         captured = []
 
         class FakeEngine:
-            def __init__(self, cfg, **kw): pass
-            def __enter__(self): return self
-            def __exit__(self, *a): pass
+            def __init__(self, cfg, **kw):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                pass
+
             def stream(self, reqs):
                 captured.extend(reqs)
                 return iter([_make_result(r.url) for r in reqs])
@@ -131,16 +167,22 @@ class TestGetAll:
         with patch("yoink.Engine", FakeEngine):
             yoink.get_all([req_a, req_b], retries=99)  # retries=99 should NOT override req objects
 
-        assert captured[0].retries == 5   # req_a unchanged
-        assert captured[1].retries == 0   # req_b unchanged
+        assert captured[0].retries == 5  # req_a unchanged
+        assert captured[1].retries == 0  # req_b unchanged
 
     def test_tick_ms_default(self):
         captured = []
 
         class FakeEngine:
-            def __init__(self, cfg, **kw): pass
-            def __enter__(self): return self
-            def __exit__(self, *a): pass
+            def __init__(self, cfg, **kw):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                pass
+
             def stream(self, reqs):
                 captured.extend(reqs)
                 return iter([_make_result(r.url) for r in reqs])
@@ -156,10 +198,18 @@ class TestStream:
         captured = []
 
         class FakeEngine:
-            def __init__(self, cfg, **kw): pass
-            def __enter__(self): return self
-            def __exit__(self, *a): pass
-            def submit(self, req): captured.append(req)
+            def __init__(self, cfg, **kw):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                pass
+
+            def submit(self, req):
+                captured.append(req)
+
             def results(self):
                 return iter([_make_result(r.url) for r in captured])
 
@@ -173,11 +223,20 @@ class TestStream:
         submitted = []
 
         class FakeEngine:
-            def __init__(self, cfg, **kw): pass
-            def __enter__(self): return self
-            def __exit__(self, *a): pass
-            def submit(self, r): submitted.append(r)
-            def results(self): return iter([_make_result("https://x.com")])
+            def __init__(self, cfg, **kw):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                pass
+
+            def submit(self, r):
+                submitted.append(r)
+
+            def results(self):
+                return iter([_make_result("https://x.com")])
 
         with patch("yoink.Engine", FakeEngine):
             list(yoink.stream([req], retries=99))

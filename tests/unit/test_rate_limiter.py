@@ -1,6 +1,5 @@
 """Unit tests for rate_limiter.py."""
 
-import asyncio
 import multiprocessing
 import time
 
@@ -40,7 +39,7 @@ async def test_per_domain_delay_enforced(shared_times):
     await rl.acquire("http://slow.com/2")
     elapsed = time.monotonic() - t
 
-    assert 0.25 <= elapsed <= 0.6, f"expected ~300ms, got {elapsed*1000:.0f}ms"
+    assert 0.25 <= elapsed <= 0.6, f"expected ~300ms, got {elapsed * 1000:.0f}ms"
 
 
 async def test_different_domains_dont_block_each_other(shared_times):
@@ -62,7 +61,7 @@ async def test_default_delay_applies_to_unknown_domains(shared_times):
     await rl.acquire("http://any.com/2")
     elapsed = time.monotonic() - t
 
-    assert elapsed >= 0.15, f"expected ~200ms, got {elapsed*1000:.0f}ms"
+    assert elapsed >= 0.15, f"expected ~200ms, got {elapsed * 1000:.0f}ms"
 
 
 async def test_per_domain_overrides_default(shared_times):

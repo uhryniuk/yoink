@@ -2,8 +2,6 @@
 
 import json
 
-import pytest
-
 from yoink.models import ProxyConfig, Request, Result
 
 
@@ -92,8 +90,11 @@ class TestResult:
     def test_ok_false_on_error(self):
         req = Request(url="https://example.com")
         r = Result(
-            request=req, url="https://example.com", html="",
-            terminal="error", error=RuntimeError("boom"),
+            request=req,
+            url="https://example.com",
+            html="",
+            terminal="error",
+            error=RuntimeError("boom"),
         )
         assert r.ok is False
 
@@ -102,8 +103,16 @@ class TestResult:
         r = Result(request=req, url="https://example.com", html="<p>hi</p>", duration_ms=42)
         d = r.to_dict()
         assert set(d.keys()) == {
-            "url", "html", "status", "headers", "screenshot",
-            "duration_ms", "terminal", "ok", "error", "request",
+            "url",
+            "html",
+            "status",
+            "headers",
+            "screenshot",
+            "duration_ms",
+            "terminal",
+            "ok",
+            "error",
+            "request",
         }
         assert d["ok"] is True
         assert d["duration_ms"] == 42

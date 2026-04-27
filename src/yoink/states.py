@@ -267,9 +267,9 @@ class HTTPStatus(State):
     ``code`` can be an exact int or a callable that receives the status
     and returns bool::
 
-        HTTPStatus(200)                         # exact match
-        HTTPStatus(lambda s: 200 <= s < 300)    # any 2xx
-        HTTPStatus(lambda s: s != 404)          # not found guard
+        HTTPStatus(200)  # exact match
+        HTTPStatus(lambda s: 200 <= s < 300)  # any 2xx
+        HTTPStatus(lambda s: s != 404)  # not found guard
     """
 
     def __init__(self, code) -> None:
@@ -320,6 +320,7 @@ class URLMatches(State):
 # ---------------------------------------------------------------------------
 # Multi-state convenience constructors
 # ---------------------------------------------------------------------------
+
 
 def All(*states: State) -> State:
     """All states must resolve (sequential left-to-right).

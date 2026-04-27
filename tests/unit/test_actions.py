@@ -21,10 +21,10 @@ from yoink.actions import (
     WaitForSelector,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def make_page(**evaluate_side_effects) -> MagicMock:
     """Return a mock Page with async methods pre-wired."""
@@ -41,6 +41,7 @@ def make_page(**evaluate_side_effects) -> MagicMock:
 # ---------------------------------------------------------------------------
 # ABC contract
 # ---------------------------------------------------------------------------
+
 
 class TestActionABC:
     def test_cannot_instantiate_bare(self):
@@ -59,6 +60,7 @@ class TestActionABC:
 # ---------------------------------------------------------------------------
 # Scroll
 # ---------------------------------------------------------------------------
+
 
 class TestScroll:
     @pytest.mark.asyncio
@@ -95,6 +97,7 @@ class TestScroll:
 # ScrollToBottom
 # ---------------------------------------------------------------------------
 
+
 class TestScrollToBottom:
     @pytest.mark.asyncio
     async def test_stops_when_no_movement(self):
@@ -102,7 +105,7 @@ class TestScrollToBottom:
         # Simulate page already at bottom: evaluate always returns same value
         page.evaluate = AsyncMock(return_value=500)
 
-        with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+        with patch("asyncio.sleep", new_callable=AsyncMock):
             await ScrollToBottom(step_px=300, delay_ms=0).run(page)
 
         # Two stall increments needed → two scrollBy calls then stop
@@ -129,10 +132,7 @@ class TestScrollToBottom:
         with patch("asyncio.sleep", new_callable=AsyncMock):
             await ScrollToBottom(step_px=300, delay_ms=0).run(page)
 
-        scroll_calls = [
-            c for c in page.evaluate.call_args_list
-            if "scrollBy" in str(c)
-        ]
+        scroll_calls = [c for c in page.evaluate.call_args_list if "scrollBy" in str(c)]
         assert len(scroll_calls) >= 1
 
     def test_defaults(self):
@@ -144,6 +144,7 @@ class TestScrollToBottom:
 # ---------------------------------------------------------------------------
 # Click
 # ---------------------------------------------------------------------------
+
 
 class TestClick:
     @pytest.mark.asyncio
@@ -161,6 +162,7 @@ class TestClick:
 # Hover
 # ---------------------------------------------------------------------------
 
+
 class TestHover:
     @pytest.mark.asyncio
     async def test_hovers_selector(self):
@@ -172,6 +174,7 @@ class TestHover:
 # ---------------------------------------------------------------------------
 # Fill
 # ---------------------------------------------------------------------------
+
 
 class TestFill:
     @pytest.mark.asyncio
@@ -190,6 +193,7 @@ class TestFill:
 # ---------------------------------------------------------------------------
 # Wait
 # ---------------------------------------------------------------------------
+
 
 class TestWait:
     @pytest.mark.asyncio
@@ -211,6 +215,7 @@ class TestWait:
 # PressKey
 # ---------------------------------------------------------------------------
 
+
 class TestPressKey:
     @pytest.mark.asyncio
     async def test_presses_key(self):
@@ -229,6 +234,7 @@ class TestPressKey:
 # SelectOption
 # ---------------------------------------------------------------------------
 
+
 class TestSelectOption:
     @pytest.mark.asyncio
     async def test_selects_option(self):
@@ -241,14 +247,13 @@ class TestSelectOption:
 # EvaluateJS
 # ---------------------------------------------------------------------------
 
+
 class TestEvaluateJS:
     @pytest.mark.asyncio
     async def test_evaluates_expression(self):
         page = make_page()
         await EvaluateJS(expression="window.scrollTo(0, document.body.scrollHeight)").run(page)
-        page.evaluate.assert_awaited_once_with(
-            "window.scrollTo(0, document.body.scrollHeight)"
-        )
+        page.evaluate.assert_awaited_once_with("window.scrollTo(0, document.body.scrollHeight)")
 
     @pytest.mark.asyncio
     async def test_evaluate_empty_string(self):
@@ -261,15 +266,18 @@ class TestEvaluateJS:
 # Integration: actions on Request
 # ---------------------------------------------------------------------------
 
+
 class TestActionsOnRequest:
     def test_request_default_empty_actions(self):
         from yoink.models import Request
+
         req = Request(url="https://example.com")
         assert req.actions == []
         assert req.pre_actions == []
 
     def test_request_accepts_actions(self):
         from yoink.models import Request
+
         req = Request(
             url="https://example.com",
             actions=[ScrollToBottom(), Wait(ms=200)],
@@ -280,6 +288,7 @@ class TestActionsOnRequest:
 
     def test_actions_excluded_from_to_dict(self):
         from yoink.models import Request
+
         req = Request(
             url="https://example.com",
             actions=[Click(".btn")],
@@ -292,12 +301,14 @@ class TestActionsOnRequest:
     def test_state_excluded_from_to_dict(self):
         from yoink.models import Request
         from yoink.states import Selector
+
         req = Request(url="https://example.com", state=Selector(".content"))
         d = req.to_dict()
         assert "state" not in d
 
     def test_json_roundtrip_with_actions(self):
         from yoink.models import Request
+
         req = Request(
             url="https://example.com",
             actions=[Click(".btn"), Wait(100)],
@@ -313,6 +324,7 @@ class TestActionsOnRequest:
 
     def test_tick_ms_and_retries_in_dict(self):
         from yoink.models import Request
+
         req = Request(url="https://example.com", tick_ms=100, retries=3)
         d = req.to_dict()
         assert d["tick_ms"] == 100
@@ -322,6 +334,7 @@ class TestActionsOnRequest:
 # ---------------------------------------------------------------------------
 # Integration: execute_actions driver helper
 # ---------------------------------------------------------------------------
+
 
 class TestWaitForSelector:
     @pytest.mark.asyncio
@@ -400,5 +413,6 @@ class TestExecuteActions:
     @pytest.mark.asyncio
     async def test_empty_list_is_noop(self):
         from yoink.drivers.playwright import execute_actions
+
         page = make_page()
         await execute_actions(page, [])  # should not raise
