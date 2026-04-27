@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import platform
 import subprocess
 import sys
 import tarfile
@@ -22,41 +21,19 @@ from yoink.models import Request, Result
 
 
 def _ensure_playwright_browsers() -> None:
-    """Install Playwright's Chromium browser if it hasn't been downloaded yet.
+    """Ensure the Playwright Chromium build for this playwright version is present.
 
-    Checks the platform cache directory for any existing chromium-* build.
-    If none is found, runs ``playwright install chromium`` once automatically.
+    Runs ``playwright install chromium`` unconditionally — it exits quickly when
+    the correct version is already cached, so it's safe to call on every startup.
     """
-    browsers_path = _playwright_cache_dir()
-    if browsers_path and any(browsers_path.glob("chromium-*")):
-        return
-
-    print(
-        "Playwright Chromium not found — installing now (this only happens once)...",
-        file=sys.stderr,
-    )
     result = subprocess.run(
         [sys.executable, "-m", "playwright", "install", "chromium"],
+        capture_output=True,
     )
     if result.returncode != 0:
+        sys.stderr.buffer.write(result.stderr)
         print("error: playwright install failed", file=sys.stderr)
         sys.exit(1)
-
-
-def _playwright_cache_dir() -> Path | None:
-    """Return the Playwright browser cache directory for this platform."""
-    env_override = Path(p) if (p := __import__("os").environ.get("PLAYWRIGHT_BROWSERS_PATH", "")) else None
-    if env_override:
-        return env_override
-
-    match platform.system():
-        case "Darwin":
-            return Path.home() / "Library" / "Caches" / "ms-playwright"
-        case "Windows":
-            local = __import__("os").environ.get("LOCALAPPDATA", "")
-            return Path(local) / "ms-playwright" if local else None
-        case _:  # Linux and others
-            return Path.home() / ".cache" / "ms-playwright"
 
 
 # -- input parsing ------------------------------------------------------------
