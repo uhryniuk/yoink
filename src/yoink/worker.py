@@ -12,8 +12,15 @@ from yoink.config import WorkerConfig
 from yoink.drivers import playwright as pw
 from yoink.models import Request, Result
 from yoink.rate_limiter import RateLimiter
-from yoink.reconciler import reconcile, _reset_state
+from yoink.reconciler import reconcile
 from yoink.states import DOMContentLoaded, State
+
+try:
+    import httpx as _httpx
+
+    _HTTPX_AVAILABLE = True
+except ImportError:
+    _HTTPX_AVAILABLE = False
 
 # Sentinel pushed into the input queue to signal a worker to exit cleanly.
 SENTINEL = None
@@ -49,7 +56,9 @@ async def _run(
             # One shared context per worker — pages are pre-allocated and reused.
             # Skips ~50ms new_context() overhead per request at the cost of session isolation.
             shared_ctx = await pw.open_context(
-                browser, Request(url=""), user_agent=config.user_agent,
+                browser,
+                Request(url=""),
+                user_agent=config.user_agent,
                 viewport=config.viewport,
             )
             page_pool: asyncio.Queue = asyncio.Queue()
@@ -66,8 +75,7 @@ async def _run(
 
                 page = await page_pool.get()
                 task = asyncio.create_task(
-                    _fetch_pooled(page, page_pool, req, output_q, rate_limiter, config,
-                                  guard, middleware_state)
+                    _fetch_pooled(page, page_pool, req, output_q, rate_limiter, config, guard, middleware_state)
                 )
                 pending.add(task)
                 task.add_done_callback(pending.discard)
@@ -102,8 +110,7 @@ async def _run(
                 await semaphore.acquire()
 
                 task = asyncio.create_task(
-                    _fetch(browser, req, output_q, rate_limiter, semaphore, config,
-                           guard, middleware_state)
+                    _fetch(browser, req, output_q, rate_limiter, semaphore, config, guard, middleware_state)
                 )
                 pending.add(task)
                 task.add_done_callback(pending.discard)
@@ -137,9 +144,14 @@ async def _fetch(
     attempts = 1 + max(0, req.retries)
     result: Result | None = None
 
+    fetch_fn = _httpx_fetch if (not req.use_browser and _HTTPX_AVAILABLE) else None
+
     for attempt in range(attempts):
         try:
-            result = await _fetch_once(browser, req, rate_limiter, config, guard, middleware_state)
+            if fetch_fn is not None:
+                result = await fetch_fn(req, rate_limiter)
+            else:
+                result = await _fetch_once(browser, req, rate_limiter, config, guard, middleware_state)
             if result.terminal not in ("error", "timeout") or attempt == attempts - 1:
                 break
         except Exception as exc:
@@ -166,9 +178,14 @@ async def _fetch_pooled(
     attempts = 1 + max(0, req.retries)
     result: Result | None = None
 
+    fetch_fn = _httpx_fetch if (not req.use_browser and _HTTPX_AVAILABLE) else None
+
     for attempt in range(attempts):
         try:
-            result = await _fetch_once_on_page(page, req, rate_limiter, config, guard, middleware_state)
+            if fetch_fn is not None:
+                result = await fetch_fn(req, rate_limiter)
+            else:
+                result = await _fetch_once_on_page(page, req, rate_limiter, config, guard, middleware_state)
             if result.terminal not in ("error", "timeout") or attempt == attempts - 1:
                 break
         except Exception as exc:
@@ -178,11 +195,12 @@ async def _fetch_pooled(
     result.duration_ms = int((time.monotonic() - start) * 1000)
     output_q.put(result)
 
-    # Reset page to blank before returning to pool
-    try:
-        await page.goto("about:blank", wait_until="domcontentloaded")
-    except Exception:
-        pass
+    if fetch_fn is None:
+        # Only reset the page when we actually used it
+        try:
+            await page.goto("about:blank", wait_until="domcontentloaded")
+        except Exception:
+            pass
     await page_pool.put(page)
 
 
@@ -230,8 +248,11 @@ async def _fetch_once_on_page(
         if not guard_ok:
             html = await pw.extract_html(page, clean=req.clean_html)
             return Result(
-                request=req, url=final_url, html=html,
-                status=status, headers=resp_headers,
+                request=req,
+                url=final_url,
+                html=html,
+                status=status,
+                headers=resp_headers,
                 terminal="guard_failed",
             )
 
@@ -246,9 +267,52 @@ async def _fetch_once_on_page(
     screenshot = await pw.take_screenshot(page) if req.screenshot else None
 
     return Result(
-        request=req, url=final_url, html=html,
-        status=status, headers=resp_headers,
-        screenshot=screenshot, terminal=terminal,
+        request=req,
+        url=final_url,
+        html=html,
+        status=status,
+        headers=resp_headers,
+        screenshot=screenshot,
+        terminal=terminal,
+    )
+
+
+async def _httpx_fetch(req: Request, rate_limiter: RateLimiter) -> Result:
+    """Fast HTTP fetch using httpx — no browser, no JS, no actions.
+
+    Use for static HTML / JSON endpoints where JavaScript is not needed.
+    Bypasses all Playwright overhead: no browser context, no page creation.
+    """
+    await rate_limiter.acquire(req.url)
+
+    proxy_url = req.proxy.server if req.proxy else None
+
+    cookie_header = "; ".join(f"{k}={v}" for k, v in req.cookies.items()) if req.cookies else None
+    headers = dict(req.headers)
+    if cookie_header:
+        headers.setdefault("Cookie", cookie_header)
+
+    async with _httpx.AsyncClient(
+        proxy=proxy_url,
+        timeout=req.timeout,
+        follow_redirects=True,
+        verify=False,
+    ) as client:
+        response = await client.get(req.url, headers=headers)
+
+    html = response.text
+    if req.clean_html:
+        from yoink.common import clean_html as _clean
+
+        html = _clean(html)
+
+    return Result(
+        request=req,
+        url=str(response.url),
+        html=html,
+        status=response.status_code,
+        headers=dict(response.headers),
+        terminal="success",
     )
 
 

@@ -34,6 +34,7 @@ class Request:
     cookies: dict[str, str] = field(default_factory=dict)
     pre_actions: list[Action] = field(default_factory=list, repr=False)
     actions: list[Action] = field(default_factory=list, repr=False)
+    use_browser: bool = True  # False → httpx fast path (no JS, no actions, no states)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -47,6 +48,7 @@ class Request:
             "tick_ms": self.tick_ms,
             "retries": self.retries,
             "cookies": self.cookies,
+            "use_browser": self.use_browser,
         }
 
     def to_json(self) -> str:

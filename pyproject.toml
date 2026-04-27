@@ -12,6 +12,7 @@ dependencies = [
     "playwright",
     "structlog",
     "beautifulsoup4",
+    "httpx>=0.28.1",
 ]
 
 [dependency-groups]
