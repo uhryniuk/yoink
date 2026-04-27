@@ -89,9 +89,14 @@ def _write_to_dir(results: list[Result], directory: Path) -> None:
     for r in results:
         if not r.ok:
             continue
-        out = directory / _result_filename(r.url)
+        stem = _result_filename(r.url)
+        out = directory / stem
         out.write_text(r.html, encoding="utf-8")
         print(f"  wrote {out}", file=sys.stderr)
+        if r.screenshot:
+            png = directory / stem.replace(".html", ".png")
+            png.write_bytes(r.screenshot)
+            print(f"  wrote {png}", file=sys.stderr)
 
 
 def _write_tarball(results: list[Result], tarball: Path) -> None:
@@ -99,11 +104,15 @@ def _write_tarball(results: list[Result], tarball: Path) -> None:
         for r in results:
             if not r.ok:
                 continue
-            name = _result_filename(r.url)
+            stem = _result_filename(r.url)
             data = r.html.encode("utf-8")
-            info = tarfile.TarInfo(name=name)
+            info = tarfile.TarInfo(name=stem)
             info.size = len(data)
             tf.addfile(info, BytesIO(data))
+            if r.screenshot:
+                png_info = tarfile.TarInfo(name=stem.replace(".html", ".png"))
+                png_info.size = len(r.screenshot)
+                tf.addfile(png_info, BytesIO(r.screenshot))
     print(f"wrote {tarball}", file=sys.stderr)
 
 
@@ -127,7 +136,7 @@ def _cmd_scrape(args: argparse.Namespace) -> int:
     else:
         cfg.workers.page_limit = args.pages
 
-    reqs = [Request(url=u) for u in urls]
+    reqs = [Request(url=u, screenshot=args.screenshot) for u in urls]
 
     # -- streaming JSONL mode -------------------------------------------------
     if args.stream:
@@ -155,7 +164,12 @@ def _cmd_scrape(args: argparse.Namespace) -> int:
     elif args.tarball:
         _write_tarball(results, Path(args.tarball))
     else:
+        # No output dir — save screenshots to cwd, print HTML to stdout
         for r in ok:
+            if r.screenshot:
+                png = Path(_result_filename(r.url).replace(".html", ".png"))
+                png.write_bytes(r.screenshot)
+                print(f"  wrote {png}", file=sys.stderr)
             print(r.html)
             if len(ok) > 1:
                 print()
@@ -177,6 +191,7 @@ def _scrape_parser() -> argparse.ArgumentParser:
     p.add_argument("--workers", "-w", type=int, default=None, help="Number of worker processes (default: 1)")
     p.add_argument("--pages", "-p", type=int, default=None, help="Concurrent pages per worker (default: 1)")
     p.add_argument("--stream", "-s", action="store_true", help="Emit JSONL results to stdout as each completes")
+    p.add_argument("--screenshot", action="store_true", help="Capture a full-page PNG screenshot alongside each result")
     p.add_argument("--output", "-o", metavar="DIR", help="Write HTML files to this directory")
     p.add_argument("--tarball", "-t", metavar="FILE", help="Write results as a .tar.gz archive")
     return p
