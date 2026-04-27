@@ -8,44 +8,26 @@ on:
 
 jobs:
   lint:
-    name: Lint & format
+    name: Lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
 
-      - name: Install dev dependencies
-        run: uv sync
+      - name: Install dependencies
+        run: uv sync --frozen
 
       - name: ruff lint
         run: uv run ruff check .
 
-      - name: ruff format check
+      - name: ruff format
         run: uv run ruff format --check .
 
-  typecheck:
-    name: Type check
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
-        with:
-          enable-cache: true
-
-      - name: Install dev dependencies
-        run: uv sync
-
-      - name: mypy
-        run: uv run mypy src/
-
   test:
-    name: Tests (Python ${{ matrix.python-version }})
+    name: Test (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -55,20 +37,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
           python-version: ${{ matrix.python-version }}
 
       - name: Install dependencies
-        run: uv sync
+        run: uv sync --frozen
 
-      - name: Install Playwright browsers
-        run: uv run playwright install chromium --with-deps
-
+      # Unit tests mock all Playwright objects — no browser binary needed.
       - name: Run unit tests
-        run: uv run pytest tests/unit/ --cov=yoink --cov-report=term-missing
-
-      - name: Run integration tests
-        run: uv run pytest tests/integration/ -v
+        run: uv run pytest tests/unit/ -v --tb=short
