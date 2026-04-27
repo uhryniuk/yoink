@@ -8,19 +8,26 @@ from playwright.async_api import Browser, BrowserContext, Page, Playwright, Resp
 
 from yoink.common import clean_html as _clean_html
 from yoink.models import Request
+from yoink.stealth import STEALTH_SCRIPT
 
+# Matches the UA injected by default when no custom UA is set.
+# Windows + Chrome 124 is the largest real-browser population segment.
 _DEFAULT_USER_AGENT = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/120.0.0.0 Safari/537.36"
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 )
 
+# Args that improve container compatibility without exposing automation signals.
+# Notably absent: --disable-web-security (very detectable), --disable-extensions
+# (real Chrome has extensions), --disable-site-isolation-trials (unusual).
+# --disable-blink-features=AutomationControlled suppresses the CDP automation
+# banner and removes several blink-level automation hints.
 BROWSER_ARGS = [
-    "--disable-web-security",
-    "--disable-site-isolation-trials",
-    "--disable-notifications",
     "--no-sandbox",
     "--disable-dev-shm-usage",
+    "--disable-blink-features=AutomationControlled",
+    "--disable-notifications",
+    "--no-first-run",
+    "--no-default-browser-check",
 ]
 
 
@@ -51,13 +58,12 @@ async def open_context(
         viewport=viewport,
     )
 
+    await ctx.add_init_script(STEALTH_SCRIPT)
+
     if req.cookies:
         parsed = urlparse(req.url)
         domain = parsed.hostname or ""
-        await ctx.add_cookies([
-            {"name": k, "value": v, "domain": domain, "path": "/"}
-            for k, v in req.cookies.items()
-        ])
+        await ctx.add_cookies([{"name": k, "value": v, "domain": domain, "path": "/"} for k, v in req.cookies.items()])
 
     return ctx
 
