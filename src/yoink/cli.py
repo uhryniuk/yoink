@@ -5,6 +5,8 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import platform
+import subprocess
 import sys
 import tarfile
 from io import BytesIO
@@ -15,6 +17,46 @@ import yoink
 from yoink.common import is_valid_url, load_urls_from_json, load_urls_from_txt
 from yoink.config import load_config
 from yoink.models import Request, Result
+
+# -- playwright auto-install --------------------------------------------------
+
+
+def _ensure_playwright_browsers() -> None:
+    """Install Playwright's Chromium browser if it hasn't been downloaded yet.
+
+    Checks the platform cache directory for any existing chromium-* build.
+    If none is found, runs ``playwright install chromium`` once automatically.
+    """
+    browsers_path = _playwright_cache_dir()
+    if browsers_path and any(browsers_path.glob("chromium-*")):
+        return
+
+    print(
+        "Playwright Chromium not found — installing now (this only happens once)...",
+        file=sys.stderr,
+    )
+    result = subprocess.run(
+        [sys.executable, "-m", "playwright", "install", "chromium"],
+    )
+    if result.returncode != 0:
+        print("error: playwright install failed", file=sys.stderr)
+        sys.exit(1)
+
+
+def _playwright_cache_dir() -> Path | None:
+    """Return the Playwright browser cache directory for this platform."""
+    env_override = Path(p) if (p := __import__("os").environ.get("PLAYWRIGHT_BROWSERS_PATH", "")) else None
+    if env_override:
+        return env_override
+
+    match platform.system():
+        case "Darwin":
+            return Path.home() / "Library" / "Caches" / "ms-playwright"
+        case "Windows":
+            local = __import__("os").environ.get("LOCALAPPDATA", "")
+            return Path(local) / "ms-playwright" if local else None
+        case _:  # Linux and others
+            return Path.home() / ".cache" / "ms-playwright"
 
 
 # -- input parsing ------------------------------------------------------------
@@ -52,15 +94,17 @@ def _result_filename(url: str) -> str:
 
 
 def _result_to_jsonl(result: Result) -> str:
-    return json.dumps({
-        "url": result.url,
-        "ok": result.ok,
-        "status": result.status,
-        "terminal": result.terminal,
-        "duration_ms": result.duration_ms,
-        "error": str(result.error) if result.error else None,
-        "html": result.html,
-    })
+    return json.dumps(
+        {
+            "url": result.url,
+            "ok": result.ok,
+            "status": result.status,
+            "terminal": result.terminal,
+            "duration_ms": result.duration_ms,
+            "error": str(result.error) if result.error else None,
+            "html": result.html,
+        }
+    )
 
 
 def _write_to_dir(results: list[Result], directory: Path) -> None:
@@ -151,20 +195,13 @@ def _scrape_parser() -> argparse.ArgumentParser:
         description="Fast headless browser scraping at scale.",
     )
     p.add_argument("--version", action="version", version=f"yoink {yoink.__version__}")
-    p.add_argument("input", nargs="?", metavar="INPUT",
-                   help="URL, path to .txt/.json file, or '-' for stdin")
-    p.add_argument("--config", metavar="FILE", default=None,
-                   help="Path to TOML config file")
-    p.add_argument("--workers", "-w", type=int, default=None,
-                   help="Number of worker processes (default: 1)")
-    p.add_argument("--pages", "-p", type=int, default=None,
-                   help="Concurrent pages per worker (default: 1)")
-    p.add_argument("--stream", "-s", action="store_true",
-                   help="Emit JSONL results to stdout as each completes")
-    p.add_argument("--output", "-o", metavar="DIR",
-                   help="Write HTML files to this directory")
-    p.add_argument("--tarball", "-t", metavar="FILE",
-                   help="Write results as a .tar.gz archive")
+    p.add_argument("input", nargs="?", metavar="INPUT", help="URL, path to .txt/.json file, or '-' for stdin")
+    p.add_argument("--config", metavar="FILE", default=None, help="Path to TOML config file")
+    p.add_argument("--workers", "-w", type=int, default=None, help="Number of worker processes (default: 1)")
+    p.add_argument("--pages", "-p", type=int, default=None, help="Concurrent pages per worker (default: 1)")
+    p.add_argument("--stream", "-s", action="store_true", help="Emit JSONL results to stdout as each completes")
+    p.add_argument("--output", "-o", metavar="DIR", help="Write HTML files to this directory")
+    p.add_argument("--tarball", "-t", metavar="FILE", help="Write results as a .tar.gz archive")
     return p
 
 
@@ -178,6 +215,7 @@ def main(argv: list[str] | None = None) -> int:
         parser.print_help()
         return 0
 
+    _ensure_playwright_browsers()
     return _cmd_scrape(args)
 
 
