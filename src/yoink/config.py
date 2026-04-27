@@ -12,21 +12,29 @@ _XDG_CONFIG = Path.home() / ".config" / "yoink" / "config.toml"
 
 # Maps uppercase env var section name → (Config attribute name, nested dataclass type)
 _SECTIONS: dict[str, tuple[str, type]] = {
-    "WORKERS": ("workers", None),      # filled after class definitions
+    "WORKERS": ("workers", None),  # filled after class definitions
     "RATE_LIMIT": ("rate_limit", None),
     "LOG": ("log", None),
 }
 
 
+def _default_page_limit() -> int:
+    # Each worker is one Chromium browser (2+ overhead processes).
+    # Pages are cheap async tasks within that browser.
+    # Rule: cpu_count // 2 pages per worker — leaves headroom for browser overhead
+    # and renderer contention while keeping pages busy during network I/O.
+    return max(2, cpu_count() // 2)
+
+
 @dataclass
 class WorkerConfig:
-    count: int = field(default_factory=cpu_count)
-    page_limit: int = 5
+    count: int = 1  # 1 worker per machine; scale throughput via page_limit, not workers
+    page_limit: int = field(default_factory=_default_page_limit)
     idle_timeout_secs: int = 300
     headless: bool = True
     user_agent: str | None = None
     persist_context: bool = False  # reuse one BrowserContext per worker (faster, less isolated)
-    viewport: dict | None = None   # e.g. {"width": 375, "height": 812} for mobile emulation
+    viewport: dict | None = None  # e.g. {"width": 375, "height": 812} for mobile emulation
 
 
 @dataclass
@@ -69,9 +77,9 @@ def load_config(path: str | Path | None = None) -> Config:
     Env var format: ``YK_<SECTION>__<FIELD>`` using uppercase and double
     underscore as the section separator. Example::
 
-        YK_WORKERS__COUNT=4
-        YK_RATE_LIMIT__DEFAULT_DELAY_MS=500
-        YK_LOG__LEVEL=DEBUG
+        YK_WORKERS__COUNT = 4
+        YK_RATE_LIMIT__DEFAULT_DELAY_MS = 500
+        YK_LOG__LEVEL = DEBUG
     """
     config = Config()
 
@@ -110,7 +118,7 @@ def _apply_env(config: Config) -> None:
     for raw_key, value in os.environ.items():
         if not raw_key.startswith(_ENV_PREFIX):
             continue
-        rest = raw_key[len(_ENV_PREFIX):]
+        rest = raw_key[len(_ENV_PREFIX) :]
         if "__" not in rest:
             continue
 

@@ -8,9 +8,10 @@ from yoink.config import Config, LogConfig, RateLimitConfig, WorkerConfig, load_
 class TestDefaults:
     def test_worker_config_defaults(self):
         import multiprocessing
+
         cfg = WorkerConfig()
-        assert cfg.count == multiprocessing.cpu_count()
-        assert cfg.page_limit == 5
+        assert cfg.count == 1
+        assert cfg.page_limit == max(2, multiprocessing.cpu_count() // 2)
         assert cfg.idle_timeout_secs == 300
         assert cfg.headless is True
         assert cfg.user_agent is None
@@ -44,7 +45,9 @@ headless = false
         assert cfg.workers.count == 2
         assert cfg.workers.headless is False
         # unset fields keep defaults
-        assert cfg.workers.page_limit == 5
+        import multiprocessing
+
+        assert cfg.workers.page_limit == max(2, multiprocessing.cpu_count() // 2)
 
     def test_load_rate_limit_per_domain(self, tmp_path):
         toml = tmp_path / "cfg.toml"
