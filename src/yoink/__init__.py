@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Iterator
+from importlib.metadata import version as _version
 
 from yoink.actions import (
     Action,
@@ -38,8 +39,6 @@ from yoink.states import (
     TimeDelay,
     URLMatches,
 )
-
-from importlib.metadata import version as _version
 
 __version__: str = _version("python-yoink")
 
