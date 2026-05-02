@@ -22,16 +22,14 @@ Optionally tracks peak RSS via psutil if installed.
 from __future__ import annotations
 
 import argparse
-import statistics
-import sys
 import time
 from typing import NamedTuple
 
-import yoink
-from yoink import Request, Selector, load_config
+from yoink import Engine, Request, Selector, load_config
 
 try:
     import psutil
+
     _PSUTIL = True
 except ImportError:
     _PSUTIL = False
@@ -89,10 +87,7 @@ def run_once(
 
     req_state = Selector(state) if state else None
 
-    reqs = [
-        Request(url=url, timeout=timeout, state=req_state)
-        for _ in range(count)
-    ]
+    reqs = [Request(url=url, timeout=timeout, state=req_state) for _ in range(count)]
 
     latencies: list[int] = []
     n_ok = 0
@@ -102,16 +97,19 @@ def run_once(
     peak_rss = 0.0
 
     t_start = time.monotonic()
-    for result in yoink.stream(reqs, workers=workers):
-        latencies.append(result.duration_ms)
-        if result.ok:
-            n_ok += 1
-        else:
-            n_fail += 1
-        if proc:
-            rss = proc.memory_info().rss / 1024 / 1024
-            if rss > peak_rss:
-                peak_rss = rss
+    with Engine(cfg) as engine:
+        for req in reqs:
+            engine.submit(req)
+        for result in engine.results():
+            latencies.append(result.duration_ms)
+            if result.ok:
+                n_ok += 1
+            else:
+                n_fail += 1
+            if proc:
+                rss = proc.memory_info().rss / 1024 / 1024
+                if rss > peak_rss:
+                    peak_rss = rss
     wall = time.monotonic() - t_start
 
     return RunResult(
@@ -134,10 +132,10 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--pages", default="1,2,5", help="Comma-separated page_limit values")
     p.add_argument("--timeout", type=float, default=30.0, help="Per-request timeout (s)")
     p.add_argument("--state", default=None, help="CSS selector to wait for (optional)")
-    p.add_argument("--scales", default=None,
-                   help="Comma-separated page counts to sweep (overrides --count)")
-    p.add_argument("--persist-context", action="store_true",
-                   help="Reuse BrowserContext per worker (faster, less isolated)")
+    p.add_argument("--scales", default=None, help="Comma-separated page counts to sweep (overrides --count)")
+    p.add_argument(
+        "--persist-context", action="store_true", help="Reuse BrowserContext per worker (faster, less isolated)"
+    )
     args = p.parse_args(argv)
 
     worker_list = [int(x) for x in args.workers.split(",")]

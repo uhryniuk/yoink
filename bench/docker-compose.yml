@@ -1,0 +1,33 @@
+services:
+  bench-static:
+    build: ./static
+    ports:
+      - "8001:80"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/index.html"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+
+  bench-react:
+    build: ./react
+    ports:
+      - "8002:80"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+
+  bench-slow:
+    build: ./slow
+    ports:
+      - "8003:80"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost/', r => process.exit(r.statusCode === 200 ? 0 : 1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
