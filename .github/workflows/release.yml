@@ -1,40 +1,73 @@
-name: Release
+name: release
 
 on:
   push:
-    tags: ["v*.*.*"]
-  workflow_call:
+    branches:
+      - main
+
+permissions:
+  contents: read
 
 jobs:
-  publish:
-    name: Publish to PyPI
+  release:
     runs-on: ubuntu-latest
-
-    # Trusted publisher (OIDC) is the preferred approach — no long-lived token.
-    # Set up at: https://pypi.org/manage/project/python-yoink/settings/publishing/
-    # Add a GitHub Actions publisher pointing at this workflow.
+    concurrency:
+      group: ${{ github.workflow }}-release-${{ github.ref_name }}
+      cancel-in-progress: false
     permissions:
-      id-token: write   # required for OIDC trusted publisher
-      contents: read
-
+      contents: write
+    outputs:
+      released: ${{ steps.release.outputs.released || 'false' }}
+      tag: ${{ steps.release.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: astral-sh/setup-uv@v5
-        with:
-          enable-cache: true
 
-      - name: Build distribution
-        run: uv build
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      # Option A — OIDC trusted publisher (no secret needed, recommended):
-      - name: Publish to PyPI
-        run: uv publish
+      - name: Install python-semantic-release
+        run: uv tool install "python-semantic-release>=10.5.3"
+
+      - name: Semantic release
+        id: release
+        run: semantic-release version
         env:
-          UV_PUBLISH_TRUSTED_PUBLISHING: "true"
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Option B — API token (uncomment if not using trusted publisher):
-      # - name: Publish to PyPI
-      #   run: uv publish
-      #   env:
-      #     UV_PUBLISH_TOKEN: ${{ secrets.PYPI_TOKEN }}
+      - name: Publish GitHub release
+        if: steps.release.outputs.released == 'true'
+        run: semantic-release publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload dist artifacts
+        if: steps.release.outputs.released == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    needs: release
+    if: needs.release.outputs.released == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}

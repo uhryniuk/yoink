@@ -39,7 +39,9 @@ from yoink.states import (
     URLMatches,
 )
 
-__version__ = "0.2.0"
+from importlib.metadata import version as _version
+
+__version__: str = _version("python-yoink")
 
 __all__ = [
     # Core
