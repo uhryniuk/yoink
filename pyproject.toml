@@ -1,6 +1,6 @@
 [project]
 name = "python-yoink"
-version = "0.2.0"
+version = "0.1.0"
 description = "Fast, fault-tolerant headless browser scraping at scale."
 readme = "README.md"
 authors = [
